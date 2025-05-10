@@ -8,12 +8,14 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 
+const PING_PATTERN = "^ping$";
+
 const PingPongSchema = {
   type: "object" as const,
   properties: {
     message: {
       type: "string",
-      pattern: "^ping$",
+      pattern: PING_PATTERN,
       description: "Message must be 'ping'"
     }
   },
@@ -30,7 +32,7 @@ function validatePingPongInput(args: unknown): { message: string } {
     throw new Error('Message must be a string');
   }
 
-  if (message !== 'ping') {
+  if (!new RegExp(PING_PATTERN).test(message)) {
     throw new Error('Message must be exactly "ping"');
   }
 
