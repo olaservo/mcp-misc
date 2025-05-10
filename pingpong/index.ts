@@ -63,7 +63,7 @@ const createServer = () => {
   return { server };
 };
 
-console.error('Starting default (STDIO) server...');
+console.error('Starting pingpong server...');
 
 async function main() {
   const transport = new StdioServerTransport();
