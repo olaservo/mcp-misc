@@ -1,217 +1,170 @@
-# Everything MCP Server
+# Example Resources MCP Server
 
-This MCP server attempts to exercise all the features of the MCP protocol. It is not intended to be a useful server, but rather a test server for builders of MCP clients. It implements prompts, tools, resources, sampling, and more to showcase MCP capabilities.
+This MCP server demonstrates the Model Context Protocol (MCP) resource capabilities. It provides various example resources to showcase different resource patterns, URI templates, and features like pagination and subscriptions.
 
-## Components
+## Overview
 
-### Tools
+The example-resources server is designed to help developers understand how to implement and work with MCP resources. It provides no tools or prompts - only resources with different data types and access patterns.
 
-1. `echo`
-   - Simple tool to echo back input messages
-   - Input:
-     - `message` (string): Message to echo back
-   - Returns: Text content with echoed message
+## Features
 
-2. `add`
-   - Adds two numbers together
-   - Inputs:
-     - `a` (number): First number
-     - `b` (number): Second number
-   - Returns: Text result of the addition
+### Resource Types
 
-3. `longRunningOperation`
-   - Demonstrates progress notifications for long operations
-   - Inputs:
-     - `duration` (number, default: 10): Duration in seconds
-     - `steps` (number, default: 5): Number of progress steps
-   - Returns: Completion message with duration and steps
-   - Sends progress notifications during execution
+The server provides four different types of resources to demonstrate various MCP resource patterns:
 
-4. `sampleLLM`
-   - Demonstrates LLM sampling capability using MCP sampling feature
-   - Inputs:
-     - `prompt` (string): The prompt to send to the LLM
-     - `maxTokens` (number, default: 100): Maximum tokens to generate
-   - Returns: Generated LLM response
+#### 1. Static Resources
+- **URI Pattern**: `test://static/resource/{id}` (where id is 1-100)
+- **Description**: 100 numbered static resources
+- **Content Types**:
+  - Even numbered resources: Plain text format
+  - Odd numbered resources: Base64 encoded binary data
+- **Pagination**: Supports pagination with 10 items per page
+- **Subscription**: Supports resource update subscriptions (updates every 10 seconds)
 
-5. `getTinyImage`
-   - Returns a small test image
-   - No inputs required
-   - Returns: Base64 encoded PNG image data
+#### 2. Search Resources
+- **URI Pattern**: `test://search{?q}`
+- **Description**: Searchable resources with query parameter
+- **Parameters**:
+  - `q` (required): Search query string
+- **Returns**: JSON with search results matching the query
 
-6. `printEnv`
-   - Prints all environment variables
-   - Useful for debugging MCP server configuration
-   - No inputs required
-   - Returns: JSON string of all environment variables
+#### 3. User List Resources
+- **URI Pattern**: `test://users{?name,limit,offset}`
+- **Description**: User listing with filtering and pagination
+- **Parameters**:
+  - `name` (optional): Filter users by name
+  - `limit` (optional, default: 10): Number of users to return (1-100)
+  - `offset` (optional, default: 0): Pagination offset
+- **Returns**: JSON with filtered and paginated user data
 
-7. `annotatedMessage`
-   - Demonstrates how annotations can be used to provide metadata about content
-   - Inputs:
-     - `messageType` (enum: "error" | "success" | "debug"): Type of message to demonstrate different annotation patterns
-     - `includeImage` (boolean, default: false): Whether to include an example image
-   - Returns: Content with varying annotations:
-     - Error messages: High priority (1.0), visible to both user and assistant
-     - Success messages: Medium priority (0.7), user-focused
-     - Debug messages: Low priority (0.3), assistant-focused
-     - Optional image: Medium priority (0.5), user-focused
-   - Example annotations:
-     ```json
-     {
-       "priority": 1.0,
-       "audience": ["user", "assistant"]
-     }
-     ```
+#### 4. Post Resources
+- **URI Pattern**: `test://api/v1/posts/{id}{?include,format}`
+- **Description**: Blog post resources with optional includes and format options
+- **Parameters**:
+  - `id` (required): Post ID (numeric)
+  - `include` (optional): Comma-separated list of additional data to include (`comments`, `author`, `stats`)
+  - `format` (optional, default: json): Response format (`json`, `xml`, `yaml`)
+- **Returns**: Post data in the specified format with optional additional data
 
-8. `getResourceReference`
-   - Returns a resource reference that can be used by MCP clients
-   - Inputs:
-     - `resourceId` (number, 1-100): ID of the resource to reference
-   - Returns: A resource reference with:
-     - Text introduction
-     - Embedded resource with `type: "resource"`
-     - Text instruction for using the resource URI
+### Resource Capabilities
 
-### Resources
+- **Resource Templates**: Provides URI templates for all resource types
+- **Pagination**: Demonstrates cursor-based pagination for static resources
+- **Subscriptions**: Supports subscribing to resource updates
+- **Parameter Validation**: Shows proper parameter validation and error handling
+- **Multiple Formats**: Demonstrates serving resources in different formats (JSON, XML, YAML)
 
-The server provides 100 test resources in two formats:
-- Even numbered resources:
-  - Plaintext format
-  - URI pattern: `test://static/resource/{even_number}`
-  - Content: Simple text description
+## Installation and Usage
 
-- Odd numbered resources:
-  - Binary blob format
-  - URI pattern: `test://static/resource/{odd_number}`
-  - Content: Base64 encoded binary data
+This is a local development project that needs to be built from source.
 
-Resource features:
-- Supports pagination (10 items per page)
-- Allows subscribing to resource updates
-- Demonstrates resource templates
-- Auto-updates subscribed resources every 5 seconds
+### Building the Project
 
-### Prompts
-
-1. `simple_prompt`
-   - Basic prompt without arguments
-   - Returns: Single message exchange
-
-2. `complex_prompt`
-   - Advanced prompt demonstrating argument handling
-   - Required arguments:
-     - `temperature` (number): Temperature setting
-   - Optional arguments:
-     - `style` (string): Output style preference
-   - Returns: Multi-turn conversation with images
-
-3. `resource_prompt`
-   - Demonstrates embedding resource references in prompts
-   - Required arguments:
-     - `resourceId` (number): ID of the resource to embed (1-100)
-   - Returns: Multi-turn conversation with an embedded resource reference
-   - Shows how to include resources directly in prompt messages
-
-### Logging
-
-The server sends random-leveled log messages every 15 seconds, e.g.:
-
-```json
-{
-  "method": "notifications/message",
-  "params": {
-	"level": "info",
-	"data": "Info-level message"
-  }
-}
+```shell
+cd example-resources
+npm install
+npm run build
 ```
 
-## Usage with Claude Desktop (uses [stdio Transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#stdio))
+### Usage with Claude Desktop
 
-Add to your `claude_desktop_config.json`:
+After building, add to your `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "everything": {
-      "command": "npx",
+    "example-resources": {
+      "command": "node",
       "args": [
-        "-y",
-        "@modelcontextprotocol/server-everything"
+        "/path/to/your/project/example-resources/dist/index.js"
       ]
     }
   }
 }
 ```
 
-## Usage with VS Code
+### Usage with VS Code
 
-For quick installation, use of of the one-click install buttons below...
-
-[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=everything&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-everything%22%5D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=everything&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-everything%22%5D%7D&quality=insiders)
-
-[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=everything&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22mcp%2Feverything%22%5D%7D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=everything&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22mcp%2Feverything%22%5D%7D&quality=insiders)
-
-For manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.
-
-Optionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.
-
-> Note that the `mcp` key is not needed in the `.vscode/mcp.json` file.
-
-#### NPX
+After building, add the following to your VS Code User Settings (JSON) or `.vscode/mcp.json`:
 
 ```json
 {
   "mcp": {
     "servers": {
-      "everything": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-everything"]
+      "example-resources": {
+        "command": "node",
+        "args": ["/path/to/your/project/example-resources/dist/index.js"]
       }
     }
   }
 }
 ```
 
-## Running from source with [HTTP+SSE Transport](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#http-with-sse) (deprecated as of [2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports))
+**Note**: Replace `/path/to/your/project/` with the actual path to where you've cloned this repository.
 
+## Development
+
+### Running from Source
+
+#### Default (STDIO) Transport
 ```shell
-cd src/everything
+cd example-resources
 npm install
+npm run build
+npm start
+```
+
+#### SSE Transport (deprecated)
+```shell
 npm run start:sse
 ```
 
-## Run from source with [Streamable HTTP Transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http)
-
+#### Streamable HTTP Transport
 ```shell
-cd src/everything
-npm install
 npm run start:streamableHttp
 ```
 
-## Running as an installed package
-### Install 
+### Building
 ```shell
-npm install -g @modelcontextprotocol/server-everything@latest
-````
-
-### Run the default (stdio) server
-```shell
-npx @modelcontextprotocol/server-everything
+npm run build
 ```
 
-### Or specify stdio explicitly
+### Development Mode
 ```shell
-npx @modelcontextprotocol/server-everything stdio
+npm run watch
 ```
 
-### Run the SSE server
-```shell
-npx @modelcontextprotocol/server-everything sse
-```
+## Example Resource URIs
 
-### Run the streamable HTTP server
-```shell
-npx @modelcontextprotocol/server-everything streamableHttp
-```
+Here are some example URIs you can use to test the different resource types:
 
+### Static Resources
+- `test://static/resource/1` - First static resource (binary)
+- `test://static/resource/2` - Second static resource (text)
+- `test://static/resource/50` - Fiftieth static resource (text)
+
+### Search Resources
+- `test://search?q=javascript` - Search for "javascript"
+- `test://search?q=api` - Search for "api"
+
+### User Resources
+- `test://users` - List all users (default pagination)
+- `test://users?name=john` - Filter users by name containing "john"
+- `test://users?limit=5&offset=0` - Get first 5 users
+- `test://users?name=jane&limit=2` - Filter by name and limit results
+
+### Post Resources
+- `test://api/v1/posts/1` - Get post 1 in JSON format
+- `test://api/v1/posts/1?include=comments,author` - Get post 1 with comments and author details
+- `test://api/v1/posts/1?format=xml` - Get post 1 in XML format
+- `test://api/v1/posts/1?include=stats&format=yaml` - Get post 1 with stats in YAML format
+
+## Transport Support
+
+The server supports three MCP transport methods:
+
+1. **STDIO** (default): Standard input/output transport
+2. **SSE**: Server-Sent Events over HTTP (deprecated as of MCP 2025-03-26)
+3. **Streamable HTTP**: Modern HTTP-based transport
+
+Use the appropriate script or command line argument to select the transport method.
