@@ -2,6 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ProgressNotificationSchema,
   Tool,
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -82,6 +83,196 @@ const ListFilesSchema = z.object({
   includeHidden: z.boolean().default(false).describe("Whether to include hidden files"),
 });
 
+// Issue #332: Complex nested objects (structured form regression)
+const ComplexOrderSchema = z.object({
+  customerName: z.string().describe("Full customer name for the order"),
+  customerTaxId: z.string().describe("Tax identification number (e.g., 123-45-6789)"),
+  customerEmail: z.string().email().describe("Customer's email address for notifications"),
+  shippingAddress: z.object({
+    street: z.string().describe("Street address"),
+    city: z.string().describe("City name"),
+    state: z.string().describe("State or province"),
+    zipCode: z.string().describe("ZIP or postal code"),
+    country: z.string().default("US").describe("Country code (ISO 3166-1 alpha-2)"),
+  }).describe("Shipping address details"),
+  items: z.array(z.object({
+    productName: z.string().describe("Name of the product"),
+    productSku: z.string().describe("Product SKU or identifier"),
+    quantity: z.number().min(1).describe("Number of items (must be positive)"),
+    unitPrice: z.number().min(0).describe("Price per unit in USD"),
+    category: z.enum(["electronics", "clothing", "books", "home", "other"]).describe("Product category"),
+    metadata: z.object({
+      weight: z.number().optional().describe("Weight in pounds"),
+      dimensions: z.object({
+        length: z.number(),
+        width: z.number(),
+        height: z.number(),
+      }).optional().describe("Dimensions in inches"),
+    }).optional().describe("Additional product metadata"),
+  })).min(1).describe("List of items in the order (at least one required)"),
+  discounts: z.array(z.object({
+    code: z.string().describe("Discount code"),
+    amount: z.number().describe("Discount amount"),
+    type: z.enum(["percentage", "fixed"]).describe("Type of discount"),
+  })).optional().describe("Applied discount codes"),
+  total: z.number().min(0).describe("Total order amount in USD"),
+  notes: z.string().optional().describe("Special instructions or notes"),
+}).describe("Complex order with nested objects and arrays to test form rendering (Issue #332)");
+
+// Issue #187: Strict type validation
+const StrictTypeValidationSchema = z.object({
+  stringField: z.string().min(1).describe("Must be a string (test entering numbers like 123321)"),
+  numberField: z.number().describe("Must be a number (test entering text like 'abc')"),
+  integerField: z.number().int().describe("Must be a whole number (test entering 3.14)"),
+  booleanField: z.boolean().describe("Must be true or false (test entering 'yes' or 1)"),
+  emailField: z.string().email().describe("Must be a valid email format"),
+  urlField: z.string().url().describe("Must be a valid URL format"),
+  enumField: z.enum(["option1", "option2", "option3"]).describe("Must be one of the predefined options"),
+  dateField: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("Must be a date in YYYY-MM-DD format"),
+  positiveNumber: z.number().positive().describe("Must be a positive number (test entering -5)"),
+  stringWithLength: z.string().min(5).max(20).describe("String must be between 5 and 20 characters"),
+}).describe("Tool to test strict type validation and error handling (Issue #187)");
+
+// Issue #429: Schema edge cases (schema placement in annotations vs inputSchema)
+const SchemaEdgeCasesSchema = z.object({
+  basicString: z.string().min(1).max(100).describe("Basic string with length constraints"),
+  enumWithDescriptions: z.enum(["small", "medium", "large"]).describe("Size selection with enum values"),
+  nestedObject: z.object({
+    level1: z.object({
+      level2: z.object({
+        deepValue: z.string().describe("Deeply nested string value"),
+        deepNumber: z.number().min(0).max(100).describe("Deeply nested number with range"),
+      }).describe("Second level nesting"),
+      siblingValue: z.boolean().describe("Boolean at level 1"),
+    }).describe("First level nesting"),
+    parallelBranch: z.array(z.string()).describe("Array of strings in parallel branch"),
+  }).describe("Complex nested object structure"),
+  arrayOfObjects: z.array(z.object({
+    id: z.number().describe("Unique identifier"),
+    name: z.string().describe("Display name"),
+    active: z.boolean().default(true).describe("Whether item is active"),
+    tags: z.array(z.string()).optional().describe("Optional array of tags"),
+  })).describe("Array containing objects with various field types"),
+  conditionalField: z.union([
+    z.string().describe("String value"),
+    z.number().describe("Numeric value"),
+    z.boolean().describe("Boolean value"),
+  ]).describe("Field that accepts multiple types (union)"),
+  optionalComplex: z.object({
+    requiredSub: z.string().describe("Required sub-field"),
+    optionalSub: z.number().optional().describe("Optional sub-field"),
+  }).optional().describe("Optional complex object"),
+}).describe("Tool with complex schema to test proper schema placement and rendering (Issue #429)");
+
+// Issue #385/#308: Rich parameter descriptions
+const RichDescriptionSchema = z.object({
+  userEmail: z.string().email().describe("A valid email address (e.g., user@example.com). This will be used for notifications, account recovery, and important updates. Make sure you have access to this email."),
+  userAge: z.number().int().min(18).max(120).describe("Age in years (must be between 18 and 120). Used for age verification, demographic analysis, and compliance with age-restricted features. This information is kept confidential."),
+  preferences: z.object({
+    theme: z.enum(["light", "dark", "auto"]).default("auto").describe("UI theme preference. 'light' for bright interface, 'dark' for dark mode, 'auto' will follow your system settings automatically."),
+    notifications: z.boolean().default(true).describe("Whether to receive email notifications about important updates, security alerts, and feature announcements. You can change this later in settings."),
+    language: z.enum(["en", "es", "fr", "de", "ja"]).default("en").describe("Preferred language for the interface. Supports English (en), Spanish (es), French (fr), German (de), and Japanese (ja)."),
+    timezone: z.string().default("UTC").describe("Your timezone for displaying dates and times correctly (e.g., 'America/New_York', 'Europe/London', 'Asia/Tokyo'). Uses IANA timezone database names."),
+  }).describe("User preference settings that control application behavior, appearance, and communication. These can be modified later in your account settings."),
+  securitySettings: z.object({
+    twoFactorEnabled: z.boolean().default(false).describe("Enable two-factor authentication for enhanced security. Highly recommended for protecting your account from unauthorized access."),
+    sessionTimeout: z.number().min(15).max(1440).default(60).describe("Session timeout in minutes (15-1440). How long you stay logged in when inactive. Shorter times are more secure but less convenient."),
+    allowedIpRanges: z.array(z.string()).optional().describe("Optional list of IP address ranges allowed to access your account (CIDR notation, e.g., '192.168.1.0/24'). Leave empty to allow access from any IP."),
+  }).describe("Security configuration options to protect your account and data. These settings help prevent unauthorized access and maintain account security."),
+}).describe("Tool with extensive parameter descriptions to test UI display of help text and documentation (Issues #385/#308)");
+
+// Array manipulation and complex data structures
+const ArrayManipulationSchema = z.object({
+  tags: z.array(z.string()).min(1).max(10).describe("List of tags to apply (1-10 tags, each as a separate string)"),
+  coordinates: z.array(z.number()).length(3).describe("Exactly 3 coordinates: [X, Y, Z] as decimal numbers"),
+  matrix: z.array(z.array(z.number())).describe("2D matrix represented as array of arrays (e.g., [[1,2],[3,4]])"),
+  userList: z.array(z.object({
+    id: z.number().int().positive().describe("Unique user ID (positive integer)"),
+    name: z.string().min(1).describe("User's full name"),
+    email: z.string().email().describe("User's email address"),
+    active: z.boolean().default(true).describe("Whether user account is active"),
+    roles: z.array(z.enum(["admin", "user", "moderator", "guest"])).describe("User's assigned roles"),
+    metadata: z.record(z.string(), z.any()).optional().describe("Additional user metadata as key-value pairs"),
+  })).describe("List of user objects with various field types"),
+  nestedArrays: z.array(z.object({
+    groupName: z.string().describe("Name of the group"),
+    members: z.array(z.object({
+      memberId: z.string().describe("Member identifier"),
+      permissions: z.array(z.string()).describe("List of permissions for this member"),
+    })).describe("Array of group members"),
+  })).describe("Nested arrays: groups containing arrays of members with arrays of permissions"),
+}).describe("Tool for testing complex array handling and nested data structures");
+
+// Conditional and optional parameters
+const ConditionalParametersSchema = z.object({
+  mode: z.enum(["simple", "advanced", "expert"]).describe("Operation mode - determines which additional fields are required"),
+  basicField: z.string().describe("Always required field regardless of mode"),
+  advancedField: z.string().optional().describe("Required when mode is 'advanced' or 'expert'"),
+  expertField: z.string().optional().describe("Required only when mode is 'expert'"),
+  optionalWithDefault: z.string().default("default_value").describe("Optional field with a default value"),
+  conditionalNumber: z.number().optional().describe("Optional number field"),
+  dependentField: z.string().optional().describe("Required only if conditionalNumber is provided"),
+  arrayField: z.array(z.string()).optional().describe("Optional array field"),
+  objectField: z.object({
+    requiredSub: z.string().describe("Required sub-field"),
+    optionalSub: z.string().optional().describe("Optional sub-field"),
+  }).optional().describe("Optional complex object with mixed required/optional fields"),
+}).describe("Tool to test conditional requirements and optional parameter handling");
+
+// Large complex schema for performance testing
+const LargeComplexSchema = z.object({
+  // Basic fields (5)
+  field1: z.string().describe("Basic string field 1"),
+  field2: z.number().describe("Basic number field 2"),
+  field3: z.boolean().describe("Basic boolean field 3"),
+  field4: z.string().email().describe("Email field 4"),
+  field5: z.enum(["a", "b", "c"]).describe("Enum field 5"),
+  
+  // Complex nested objects (3)
+  complexObject1: z.object({
+    sub1: z.string().describe("Sub-field 1"),
+    sub2: z.number().describe("Sub-field 2"),
+    sub3: z.object({
+      deepSub1: z.string().describe("Deep sub-field 1"),
+      deepSub2: z.boolean().describe("Deep sub-field 2"),
+    }).describe("Nested object in complex object 1"),
+  }).describe("Complex nested object 1"),
+  
+  complexObject2: z.object({
+    subArray: z.array(z.string()).describe("Array of strings"),
+    subEnum: z.enum(["x", "y", "z"]).describe("Enum in complex object 2"),
+  }).describe("Complex nested object 2"),
+  
+  complexObject3: z.object({
+    mixedArray: z.array(z.object({
+      itemId: z.number().describe("Item ID"),
+      itemName: z.string().describe("Item name"),
+    })).describe("Array of objects"),
+  }).describe("Complex nested object 3"),
+  
+  // Arrays (4)
+  stringArray: z.array(z.string()).describe("Array of strings"),
+  numberArray: z.array(z.number()).describe("Array of numbers"),
+  booleanArray: z.array(z.boolean()).describe("Array of booleans"),
+  objectArray: z.array(z.object({
+    id: z.number().describe("Object ID"),
+    value: z.string().describe("Object value"),
+  })).describe("Array of objects"),
+  
+  // Optional fields (8)
+  optional1: z.string().optional().describe("Optional string 1"),
+  optional2: z.number().optional().describe("Optional number 2"),
+  optional3: z.boolean().optional().describe("Optional boolean 3"),
+  optional4: z.array(z.string()).optional().describe("Optional array 4"),
+  optional5: z.object({
+    optSub1: z.string().describe("Optional sub 1"),
+    optSub2: z.number().describe("Optional sub 2"),
+  }).optional().describe("Optional object 5"),
+  optional6: z.string().default("default6").describe("Optional with default 6"),
+  optional7: z.number().default(42).describe("Optional with default 7"),
+  optional8: z.enum(["opt1", "opt2"]).optional().describe("Optional enum 8"),
+}).describe("Large schema with 25+ fields to test UI performance and form rendering");
+
 enum ToolName {
   // Basic Tools
   ECHO = "echo",
@@ -106,6 +297,16 @@ enum ToolName {
   // System Tools
   GET_SYSTEM_INFO = "getSystemInfo",
   LIST_FILES = "listFiles",
+  
+  // Testing Tools for GitHub Issues
+  COMPLEX_ORDER = "complexOrder",
+  STRICT_TYPE_VALIDATION = "strictTypeValidation",
+  SCHEMA_EDGE_CASES = "schemaEdgeCases",
+  RICH_DESCRIPTION = "richDescription",
+  ARRAY_MANIPULATION = "arrayManipulation",
+  CONDITIONAL_PARAMETERS = "conditionalParameters",
+  LARGE_COMPLEX_SCHEMA = "largeComplexSchema",
+  PROGRESS_NOTIFICATION = "progressNotification",
 }
 
 // Helper functions
@@ -267,6 +468,48 @@ export const createServer = () => {
         name: ToolName.LIST_FILES,
         description: "Lists files in a directory (simulated)",
         inputSchema: zodToJsonSchema(ListFilesSchema) as ToolInput,
+      },
+      
+      // Testing Tools for GitHub Issues
+      {
+        name: ToolName.COMPLEX_ORDER,
+        description: "Tests complex nested objects and arrays (Issue #332)",
+        inputSchema: zodToJsonSchema(ComplexOrderSchema) as ToolInput,
+      },
+      {
+        name: ToolName.STRICT_TYPE_VALIDATION,
+        description: "Tests strict type validation and error handling (Issue #187)",
+        inputSchema: zodToJsonSchema(StrictTypeValidationSchema) as ToolInput,
+      },
+      {
+        name: ToolName.SCHEMA_EDGE_CASES,
+        description: "Tests complex schema placement and rendering (Issue #429)",
+        inputSchema: zodToJsonSchema(SchemaEdgeCasesSchema) as ToolInput,
+      },
+      {
+        name: ToolName.RICH_DESCRIPTION,
+        description: "Tests rich parameter descriptions and help text (Issues #385/#308)",
+        inputSchema: zodToJsonSchema(RichDescriptionSchema) as ToolInput,
+      },
+      {
+        name: ToolName.ARRAY_MANIPULATION,
+        description: "Tests complex array handling and nested data structures",
+        inputSchema: zodToJsonSchema(ArrayManipulationSchema) as ToolInput,
+      },
+      {
+        name: ToolName.CONDITIONAL_PARAMETERS,
+        description: "Tests conditional requirements and optional parameter handling",
+        inputSchema: zodToJsonSchema(ConditionalParametersSchema) as ToolInput,
+      },
+      {
+        name: ToolName.LARGE_COMPLEX_SCHEMA,
+        description: "Tests UI performance with large schemas (25+ fields)",
+        inputSchema: zodToJsonSchema(LargeComplexSchema) as ToolInput,
+      },
+      {
+        name: ToolName.PROGRESS_NOTIFICATION,
+        description: "Tests progress notifications and list change events (Issue #378)",
+        inputSchema: zodToJsonSchema(ProgressNotificationSchema) as ToolInput,
       },
     ];
 
