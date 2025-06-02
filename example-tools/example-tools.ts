@@ -236,6 +236,35 @@ const LargeComplexSchema = z.object({
   optional8: z.enum(["opt1", "opt2"]).optional().describe("Optional enum 8"),
 }).describe("Large schema with 25+ fields to test UI performance and form rendering");
 
+// Issue #393: Parameter submission testing
+const ParameterSubmissionTestSchema = z.object({
+  requiredString: z.string().describe("Required string field - must be submitted"),
+  optionalString: z.string().optional().describe("Optional string - test if submitted when filled"),
+  requiredNumber: z.number().describe("Required number field"),
+  optionalNumber: z.number().optional().describe("Optional number - test submission behavior"),
+  booleanField: z.boolean().describe("Boolean field - test checkbox submission"),
+  defaultValueField: z.string().default("default_value").describe("Field with default value"),
+  enumField: z.enum(["option1", "option2", "option3"]).describe("Enum selection field"),
+}).describe("Tool to test parameter submission and form behavior (Issue #393)");
+
+// Issues #353/#328: Null vs undefined regression testing
+const NullUndefinedRegressionSchema = z.object({
+  requiredField: z.string().describe("Required field for comparison"),
+  optionalString: z.string().optional().describe("Optional string (should be undefined when empty, not null)"),
+  optionalNullableString: z.string().optional().nullable().describe("Optional nullable string (can accept null)"),
+  optionalNumber: z.number().optional().describe("Optional number (test null vs undefined behavior)"),
+  optionalBoolean: z.boolean().optional().describe("Optional boolean (test null vs undefined)"),
+}).describe("Tool to test null vs undefined handling for optional parameters (Issues #353/#328)");
+
+// Issue #154: Integer type regression testing
+const IntegerRegressionSchema = z.object({
+  integerField: z.number().int().describe("Must be integer (test: 42, should not accept '42' as string)"),
+  numberField: z.number().describe("Can be any number (test: 3.14)"),
+  positiveInteger: z.number().int().positive().describe("Must be positive integer (test: -5 should fail)"),
+  integerWithRange: z.number().int().min(1).max(100).describe("Integer between 1-100"),
+  stringField: z.string().describe("String field for comparison (should accept '42' as string)"),
+}).describe("Tool to test integer type validation and string/number coercion (Issue #154)");
+
 enum ToolName {
   // Basic Tools
   ECHO = "echo",
@@ -258,6 +287,11 @@ enum ToolName {
   CONDITIONAL_PARAMETERS = "conditionalParameters",
   LARGE_COMPLEX_SCHEMA = "largeComplexSchema",
   PROGRESS_NOTIFICATION = "progressNotification",
+  
+  // New Testing Tools
+  PARAMETER_SUBMISSION_TEST = "parameterSubmissionTest",
+  NULL_UNDEFINED_REGRESSION = "nullUndefinedRegression",
+  INTEGER_REGRESSION = "integerRegression",
 }
 
 // Helper functions
@@ -401,6 +435,23 @@ export const createServer = () => {
         name: ToolName.PROGRESS_NOTIFICATION,
         description: "Tests progress notifications and list change events (Issue #378)",
         inputSchema: zodToJsonSchema(ProgressNotificationSchema) as ToolInput,
+      },
+      
+      // New Testing Tools
+      {
+        name: ToolName.PARAMETER_SUBMISSION_TEST,
+        description: "Tests parameter submission and form behavior (Issue #393)",
+        inputSchema: zodToJsonSchema(ParameterSubmissionTestSchema) as ToolInput,
+      },
+      {
+        name: ToolName.NULL_UNDEFINED_REGRESSION,
+        description: "Tests null vs undefined handling for optional parameters (Issues #353/#328)",
+        inputSchema: zodToJsonSchema(NullUndefinedRegressionSchema) as ToolInput,
+      },
+      {
+        name: ToolName.INTEGER_REGRESSION,
+        description: "Tests integer type validation and string/number coercion (Issue #154)",
+        inputSchema: zodToJsonSchema(IntegerRegressionSchema) as ToolInput,
       },
     ];
 
@@ -557,14 +608,14 @@ export const createServer = () => {
       return { content };
     }
 
-    // Testing Tools - These don't need full implementations, just return success messages
+    // Testing Tools - These don't need full implementations, just return success messages with parameter logging
     if (name === ToolName.COMPLEX_ORDER) {
       const validatedArgs = ComplexOrderSchema.parse(args);
       return {
         content: [
           {
             type: "text",
-            text: `Complex order processed successfully for ${validatedArgs.customerName}. Total: $${validatedArgs.total}`,
+            text: `Complex order processed successfully for ${validatedArgs.customerName}. Total: $${validatedArgs.total}. Items: ${validatedArgs.items.length}`,
           },
         ],
       };
@@ -576,7 +627,7 @@ export const createServer = () => {
         content: [
           {
             type: "text",
-            text: `All fields validated successfully. String: "${validatedArgs.stringField}", Number: ${validatedArgs.numberField}`,
+            text: `All fields validated successfully. String: "${validatedArgs.stringField}", Number: ${validatedArgs.numberField}, Integer: ${validatedArgs.integerField}`,
           },
         ],
       };
@@ -600,7 +651,7 @@ export const createServer = () => {
         content: [
           {
             type: "text",
-            text: `User profile created for ${validatedArgs.userEmail}, age ${validatedArgs.userAge}`,
+            text: `User profile created for ${validatedArgs.userEmail}, age ${validatedArgs.userAge}. Theme: ${validatedArgs.preferences.theme}`,
           },
         ],
       };
@@ -612,7 +663,7 @@ export const createServer = () => {
         content: [
           {
             type: "text",
-            text: `Array manipulation completed. Tags: ${validatedArgs.tags.length}, Users: ${validatedArgs.userList.length}`,
+            text: `Array manipulation completed. Tags: ${validatedArgs.tags.length}, Users: ${validatedArgs.userList.length}, Coordinates: [${validatedArgs.coordinates.join(', ')}]`,
           },
         ],
       };
@@ -624,7 +675,7 @@ export const createServer = () => {
         content: [
           {
             type: "text",
-            text: `Conditional parameters processed in ${validatedArgs.mode} mode. Basic field: "${validatedArgs.basicField}"`,
+            text: `Conditional parameters processed in ${validatedArgs.mode} mode. Basic field: "${validatedArgs.basicField}". Optional with default: "${validatedArgs.optionalWithDefault}".`,
           },
         ],
       };
@@ -636,7 +687,86 @@ export const createServer = () => {
         content: [
           {
             type: "text",
-            text: `Large complex schema processed successfully. Field1: "${validatedArgs.field1}", Field2: ${validatedArgs.field2}`,
+            text: `Large complex schema processed successfully. Field1: "${validatedArgs.field1}", Field2: ${validatedArgs.field2}, Field3: ${validatedArgs.field3}.`,
+          },
+        ],
+      };
+    }
+
+    if (name === ToolName.PARAMETER_SUBMISSION_TEST) {
+      const validatedArgs = ParameterSubmissionTestSchema.parse(args);
+      const receivedParams = {
+        requiredString: validatedArgs.requiredString,
+        optionalString: validatedArgs.optionalString,
+        requiredNumber: validatedArgs.requiredNumber,
+        optionalNumber: validatedArgs.optionalNumber,
+        booleanField: validatedArgs.booleanField,
+        defaultValueField: validatedArgs.defaultValueField,
+        enumField: validatedArgs.enumField,
+      };
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Parameter submission test completed. Required string: "${validatedArgs.requiredString}", Boolean: ${validatedArgs.booleanField}, Enum: ${validatedArgs.enumField}. Received parameters: ${JSON.stringify(receivedParams, null, 2)}`,
+          },
+        ],
+      };
+    }
+
+    if (name === ToolName.NULL_UNDEFINED_REGRESSION) {
+      const validatedArgs = NullUndefinedRegressionSchema.parse(args);
+      const receivedParams = {
+        requiredField: validatedArgs.requiredField,
+        optionalString: validatedArgs.optionalString,
+        optionalNullableString: validatedArgs.optionalNullableString,
+        optionalNumber: validatedArgs.optionalNumber,
+        optionalBoolean: validatedArgs.optionalBoolean,
+      };
+      
+      // Log the types for debugging
+      const typeInfo = {
+        optionalString: typeof validatedArgs.optionalString,
+        optionalNullableString: typeof validatedArgs.optionalNullableString,
+        optionalNumber: typeof validatedArgs.optionalNumber,
+        optionalBoolean: typeof validatedArgs.optionalBoolean,
+      };
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Null/undefined regression test completed. Required: "${validatedArgs.requiredField}". Type info: ${JSON.stringify(typeInfo)}. Received parameters: ${JSON.stringify(receivedParams, null, 2)}`,
+          },
+        ],
+      };
+    }
+
+    if (name === ToolName.INTEGER_REGRESSION) {
+      const validatedArgs = IntegerRegressionSchema.parse(args);
+      const receivedParams = {
+        integerField: validatedArgs.integerField,
+        numberField: validatedArgs.numberField,
+        positiveInteger: validatedArgs.positiveInteger,
+        integerWithRange: validatedArgs.integerWithRange,
+        stringField: validatedArgs.stringField,
+      };
+      
+      // Log the types for debugging
+      const typeInfo = {
+        integerField: typeof validatedArgs.integerField,
+        numberField: typeof validatedArgs.numberField,
+        positiveInteger: typeof validatedArgs.positiveInteger,
+        integerWithRange: typeof validatedArgs.integerWithRange,
+        stringField: typeof validatedArgs.stringField,
+      };
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Integer regression test completed. Integer: ${validatedArgs.integerField}, Number: ${validatedArgs.numberField}, String: "${validatedArgs.stringField}". Type info: ${JSON.stringify(typeInfo)}. Received parameters: ${JSON.stringify(receivedParams, null, 2)}`,
           },
         ],
       };
