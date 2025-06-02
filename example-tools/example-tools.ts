@@ -28,30 +28,7 @@ const GetCurrentTimeSchema = z.object({
   timezone: z.string().optional().describe("Timezone (e.g., 'UTC', 'America/New_York'). Defaults to local timezone."),
 });
 
-// Text Processing Tools
-const ReverseTextSchema = z.object({
-  text: z.string().describe("Text to reverse"),
-});
-
-const CountWordsSchema = z.object({
-  text: z.string().describe("Text to count words in"),
-  includeSpaces: z.boolean().default(false).describe("Whether to include spaces in the count"),
-});
-
-const GenerateUuidSchema = z.object({
-  version: z.enum(["v4"]).default("v4").describe("UUID version to generate"),
-});
-
 // Data Tools
-const ValidateEmailSchema = z.object({
-  email: z.string().describe("Email address to validate"),
-});
-
-const ParseJsonSchema = z.object({
-  jsonString: z.string().describe("JSON string to parse"),
-  strict: z.boolean().default(true).describe("Whether to use strict JSON parsing"),
-});
-
 const FormatDataSchema = z.object({
   data: z.any().describe("Data to format"),
   format: z.enum(["json", "yaml", "table"]).default("json").describe("Output format"),
@@ -71,16 +48,6 @@ const AnnotatedResponseSchema = z.object({
 
 const ImageGeneratorSchema = z.object({
   type: z.enum(["sample", "placeholder"]).default("sample").describe("Type of image to generate"),
-});
-
-// System Tools
-const GetSystemInfoSchema = z.object({
-  includeEnv: z.boolean().default(false).describe("Whether to include environment variables"),
-});
-
-const ListFilesSchema = z.object({
-  directory: z.string().default(".").describe("Directory to list (simulated)"),
-  includeHidden: z.boolean().default(false).describe("Whether to include hidden files"),
 });
 
 // Issue #332: Complex nested objects (structured form regression)
@@ -279,24 +246,13 @@ enum ToolName {
   ADD = "add", 
   GET_CURRENT_TIME = "getCurrentTime",
   
-  // Text Processing Tools
-  REVERSE_TEXT = "reverseText",
-  COUNT_WORDS = "countWords",
-  GENERATE_UUID = "generateUuid",
-  
   // Data Tools
-  VALIDATE_EMAIL = "validateEmail",
-  PARSE_JSON = "parseJson",
   FORMAT_DATA = "formatData",
   
   // Advanced Features
   LONG_RUNNING_TASK = "longRunningTask",
   ANNOTATED_RESPONSE = "annotatedResponse",
   IMAGE_GENERATOR = "imageGenerator",
-  
-  // System Tools
-  GET_SYSTEM_INFO = "getSystemInfo",
-  LIST_FILES = "listFiles",
   
   // Testing Tools for GitHub Issues
   COMPLEX_ORDER = "complexOrder",
@@ -310,19 +266,6 @@ enum ToolName {
 }
 
 // Helper functions
-function generateUuid(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c == 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
-
-function validateEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
 function formatAsTable(data: any): string {
   if (Array.isArray(data)) {
     if (data.length === 0) return "Empty array";
@@ -407,34 +350,7 @@ export const createServer = () => {
         inputSchema: zodToJsonSchema(GetCurrentTimeSchema) as ToolInput,
       },
       
-      // Text Processing Tools
-      {
-        name: ToolName.REVERSE_TEXT,
-        description: "Reverses the input text",
-        inputSchema: zodToJsonSchema(ReverseTextSchema) as ToolInput,
-      },
-      {
-        name: ToolName.COUNT_WORDS,
-        description: "Counts words in the input text",
-        inputSchema: zodToJsonSchema(CountWordsSchema) as ToolInput,
-      },
-      {
-        name: ToolName.GENERATE_UUID,
-        description: "Generates a UUID",
-        inputSchema: zodToJsonSchema(GenerateUuidSchema) as ToolInput,
-      },
-      
       // Data Tools
-      {
-        name: ToolName.VALIDATE_EMAIL,
-        description: "Validates an email address format",
-        inputSchema: zodToJsonSchema(ValidateEmailSchema) as ToolInput,
-      },
-      {
-        name: ToolName.PARSE_JSON,
-        description: "Parses a JSON string and validates it",
-        inputSchema: zodToJsonSchema(ParseJsonSchema) as ToolInput,
-      },
       {
         name: ToolName.FORMAT_DATA,
         description: "Formats data in different output formats",
@@ -456,18 +372,6 @@ export const createServer = () => {
         name: ToolName.IMAGE_GENERATOR,
         description: "Generates sample images",
         inputSchema: zodToJsonSchema(ImageGeneratorSchema) as ToolInput,
-      },
-      
-      // System Tools
-      {
-        name: ToolName.GET_SYSTEM_INFO,
-        description: "Gets system information",
-        inputSchema: zodToJsonSchema(GetSystemInfoSchema) as ToolInput,
-      },
-      {
-        name: ToolName.LIST_FILES,
-        description: "Lists files in a directory (simulated)",
-        inputSchema: zodToJsonSchema(ListFilesSchema) as ToolInput,
       },
       
       // Testing Tools for GitHub Issues
@@ -565,92 +469,7 @@ export const createServer = () => {
       };
     }
 
-    // Text Processing Tools
-    if (name === ToolName.REVERSE_TEXT) {
-      const validatedArgs = ReverseTextSchema.parse(args);
-      const reversed = validatedArgs.text.split("").reverse().join("");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Original: "${validatedArgs.text}"\nReversed: "${reversed}"`,
-          },
-        ],
-      };
-    }
-
-    if (name === ToolName.COUNT_WORDS) {
-      const validatedArgs = CountWordsSchema.parse(args);
-      const words = validatedArgs.text.trim().split(/\s+/).filter(word => word.length > 0);
-      const wordCount = words.length;
-      const charCount = validatedArgs.text.length;
-      const charCountNoSpaces = validatedArgs.text.replace(/\s/g, "").length;
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Text analysis:
-- Words: ${wordCount}
-- Characters: ${charCount}
-- Characters (no spaces): ${charCountNoSpaces}
-- Average word length: ${wordCount > 0 ? (charCountNoSpaces / wordCount).toFixed(1) : 0}`,
-          },
-        ],
-      };
-    }
-
-    if (name === ToolName.GENERATE_UUID) {
-      const validatedArgs = GenerateUuidSchema.parse(args);
-      const uuid = generateUuid();
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Generated UUID (${validatedArgs.version}): ${uuid}`,
-          },
-        ],
-      };
-    }
-
     // Data Tools
-    if (name === ToolName.VALIDATE_EMAIL) {
-      const validatedArgs = ValidateEmailSchema.parse(args);
-      const isValid = validateEmail(validatedArgs.email);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Email "${validatedArgs.email}" is ${isValid ? "valid" : "invalid"}.`,
-          },
-        ],
-      };
-    }
-
-    if (name === ToolName.PARSE_JSON) {
-      const validatedArgs = ParseJsonSchema.parse(args);
-      try {
-        const parsed = JSON.parse(validatedArgs.jsonString);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `JSON parsed successfully:\n${JSON.stringify(parsed, null, 2)}`,
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `JSON parsing failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-            },
-          ],
-        };
-      }
-    }
-
     if (name === ToolName.FORMAT_DATA) {
       const validatedArgs = FormatDataSchema.parse(args);
       let formatted: string;
@@ -773,59 +592,86 @@ export const createServer = () => {
       };
     }
 
-    // System Tools
-    if (name === ToolName.GET_SYSTEM_INFO) {
-      const validatedArgs = GetSystemInfoSchema.parse(args);
-      
-      const systemInfo = {
-        platform: process.platform,
-        nodeVersion: process.version,
-        architecture: process.arch,
-        uptime: process.uptime(),
-        memoryUsage: process.memoryUsage(),
-        pid: process.pid,
-      };
-      
-      const content = [
-        {
-          type: "text",
-          text: `System Information:\n${JSON.stringify(systemInfo, null, 2)}`,
-        },
-      ];
-      
-      if (validatedArgs.includeEnv) {
-        content.push({
-          type: "text",
-          text: `Environment Variables:\n${JSON.stringify(process.env, null, 2)}`,
-        });
-      }
-      
-      return { content };
-    }
-
-    if (name === ToolName.LIST_FILES) {
-      const validatedArgs = ListFilesSchema.parse(args);
-      
-      // Simulated file listing
-      const files = [
-        { name: "document.txt", size: 1024, type: "file" },
-        { name: "image.png", size: 2048, type: "file" },
-        { name: "subfolder", size: 0, type: "directory" },
-      ];
-      
-      if (validatedArgs.includeHidden) {
-        files.push({ name: ".hidden", size: 512, type: "file" });
-      }
-      
-      const fileList = files
-        .map(f => `${f.type === "directory" ? "📁" : "📄"} ${f.name} (${f.size} bytes)`)
-        .join("\n");
-      
+    // Testing Tools - These don't need full implementations, just return success messages
+    if (name === ToolName.COMPLEX_ORDER) {
+      const validatedArgs = ComplexOrderSchema.parse(args);
       return {
         content: [
           {
             type: "text",
-            text: `Files in "${validatedArgs.directory}":\n${fileList}\n\nNote: This is a simulated file listing for demonstration purposes.`,
+            text: `Complex order processed successfully for ${validatedArgs.customerName}. Total: $${validatedArgs.total}`,
+          },
+        ],
+      };
+    }
+
+    if (name === ToolName.STRICT_TYPE_VALIDATION) {
+      const validatedArgs = StrictTypeValidationSchema.parse(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `All fields validated successfully. String: "${validatedArgs.stringField}", Number: ${validatedArgs.numberField}`,
+          },
+        ],
+      };
+    }
+
+    if (name === ToolName.SCHEMA_EDGE_CASES) {
+      const validatedArgs = SchemaEdgeCasesSchema.parse(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Schema edge cases processed. Basic string: "${validatedArgs.basicString}", Enum: ${validatedArgs.enumWithDescriptions}`,
+          },
+        ],
+      };
+    }
+
+    if (name === ToolName.RICH_DESCRIPTION) {
+      const validatedArgs = RichDescriptionSchema.parse(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `User profile created for ${validatedArgs.userEmail}, age ${validatedArgs.userAge}`,
+          },
+        ],
+      };
+    }
+
+    if (name === ToolName.ARRAY_MANIPULATION) {
+      const validatedArgs = ArrayManipulationSchema.parse(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Array manipulation completed. Tags: ${validatedArgs.tags.length}, Users: ${validatedArgs.userList.length}`,
+          },
+        ],
+      };
+    }
+
+    if (name === ToolName.CONDITIONAL_PARAMETERS) {
+      const validatedArgs = ConditionalParametersSchema.parse(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Conditional parameters processed in ${validatedArgs.mode} mode. Basic field: "${validatedArgs.basicField}"`,
+          },
+        ],
+      };
+    }
+
+    if (name === ToolName.LARGE_COMPLEX_SCHEMA) {
+      const validatedArgs = LargeComplexSchema.parse(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Large complex schema processed successfully. Field1: "${validatedArgs.field1}", Field2: ${validatedArgs.field2}`,
           },
         ],
       };
