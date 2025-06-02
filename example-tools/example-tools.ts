@@ -46,10 +46,6 @@ const AnnotatedResponseSchema = z.object({
   includeMetadata: z.boolean().default(true).describe("Whether to include metadata"),
 });
 
-const ImageGeneratorSchema = z.object({
-  type: z.enum(["sample", "placeholder"]).default("sample").describe("Type of image to generate"),
-});
-
 // Issue #332: Complex nested objects (structured form regression)
 const ComplexOrderSchema = z.object({
   customerName: z.string().describe("Full customer name for the order"),
@@ -252,7 +248,6 @@ enum ToolName {
   // Advanced Features
   LONG_RUNNING_TASK = "longRunningTask",
   ANNOTATED_RESPONSE = "annotatedResponse",
-  IMAGE_GENERATOR = "imageGenerator",
   
   // Testing Tools for GitHub Issues
   COMPLEX_ORDER = "complexOrder",
@@ -315,9 +310,6 @@ function formatAsYaml(data: any): string {
   return yamlify(data);
 }
 
-// Sample tiny image (1x1 pixel PNG)
-const SAMPLE_IMAGE = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
-
 export const createServer = () => {
   const server = new Server(
     {
@@ -367,11 +359,6 @@ export const createServer = () => {
         name: ToolName.ANNOTATED_RESPONSE,
         description: "Demonstrates annotated responses with metadata",
         inputSchema: zodToJsonSchema(AnnotatedResponseSchema) as ToolInput,
-      },
-      {
-        name: ToolName.IMAGE_GENERATOR,
-        description: "Generates sample images",
-        inputSchema: zodToJsonSchema(ImageGeneratorSchema) as ToolInput,
       },
       
       // Testing Tools for GitHub Issues
@@ -568,28 +555,6 @@ export const createServer = () => {
       }
       
       return { content };
-    }
-
-    if (name === ToolName.IMAGE_GENERATOR) {
-      const validatedArgs = ImageGeneratorSchema.parse(args);
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Generated ${validatedArgs.type} image:`,
-          },
-          {
-            type: "image",
-            data: SAMPLE_IMAGE,
-            mimeType: "image/png",
-          },
-          {
-            type: "text",
-            text: "This is a sample 1x1 pixel image for demonstration purposes.",
-          },
-        ],
-      };
     }
 
     // Testing Tools - These don't need full implementations, just return success messages
