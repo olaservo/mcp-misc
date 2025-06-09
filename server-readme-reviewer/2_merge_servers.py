@@ -368,7 +368,7 @@ def main():
                        required=True,
                        help='Type of servers to process (community or official)')
     parser.add_argument('--readme-path', 
-                       default='C:\\Users\\johnn\\OneDrive\\Documents\\GitHub\\olaservo\\servers\\README.md',
+                       default='path/to/README.md',
                        help='Path to the README.md file to update')
     parser.add_argument('--dry-run', action='store_true',
                        help='Show what would be changed without making changes')
