@@ -7,7 +7,7 @@ OUR CURRENT TASK:
 Since this is an official repository for MCP, our job is to review each link to make sure that any server we add to this list meets the following guidelines at minimum:
 
 - The link MUST go to a code repository for an MCP Server
-- Any images or icons used in links must point to a valid image
+- Any images or icons used in links must point to a valid image (i.e. it must not return a 404)
 - The organization maintaining or owning the repository is valid as the owner/maintainer of the official repository
 - There are no red flags related to security or other aspects of the repo
 - There MUST be documentation that indicates how to install it
