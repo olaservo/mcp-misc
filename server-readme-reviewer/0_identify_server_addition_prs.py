@@ -504,7 +504,7 @@ def main():
         community_count = len([r for r in results if r['category'] == 'community'])
         
         print(f"\n=== Server Addition PRs by Category ===")
-        print(f"Official servers (with icons): {official_count}")
+        print(f"Official servers: {official_count}")
         if official_count > 0:
             official_servers = [r for r in results if r['category'] == 'official']
             for result in official_servers[:5]:  # Show first 5
@@ -512,7 +512,7 @@ def main():
             if official_count > 5:
                 print(f"  ... and {official_count - 5} more")
         
-        print(f"\nCommunity servers (no icons): {community_count}")
+        print(f"\nCommunity servers: {community_count}")
         if community_count > 0:
             community_servers = [r for r in results if r['category'] == 'community']
             for result in community_servers[:5]:  # Show first 5
