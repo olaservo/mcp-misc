@@ -1,12 +1,14 @@
 We maintain a repository containing a collection of reference implementations for the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP), as well as a Readme containing a list of links to community built MCP servers, official MCP servers and additional resources: https://github.com/modelcontextprotocol/servers 
 
-We've collected a dataset of all open community server PRs in batched CSV files saved to this directory: {{output_location}}
+We've collected a dataset of all open official MCP server PRs in batched CSV files saved to this directory: {{output_location}}
 
 OUR CURRENT TASK: 
 
 Since this is an official repository for MCP, our job is to review each link to make sure that any server we add to this list meets the following guidelines at minimum:
 
 - The link MUST go to a code repository for an MCP Server
+- Any images or icons used in links must point to a valid image
+- The organization maintaining or owning the repository is valid as the owner/maintainer of the official repository
 - There are no red flags related to security or other aspects of the repo
 - There MUST be documentation that indicates how to install it
 
@@ -18,7 +20,7 @@ The columns in the validation results CSV must include the column names below:
 
 PR_Number,PR_Title,Complete_Line,Server_URL,Server_Name,PR_Author,Validation_Status,Is_Valid_Confidence_Level,Validation_Notes,Category
 
-The validation output must be saved here: {{output_location}}/validation_results with file naming convention `server_addition_prs_community_batch_{number}_validation.csv`
+The validation output must be saved here: {{output_location}}/validation_results with file naming convention `server_addition_prs_official_batch_{number}_validation.csv`
 
 NOTE: ONLY review and validate links from the current file {{current_file_name}} in order to maintain review quality.
 
