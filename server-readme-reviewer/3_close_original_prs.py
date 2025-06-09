@@ -109,7 +109,7 @@ def check_pr_status(pr_number: int) -> Optional[Dict]:
 
 def add_comment_to_pr(pr_number: int, username: str, combined_pr_url: str, dry_run: bool = False) -> bool:
     """Add a comment to the original PR."""
-    comment_body = f"""Hi @{username}, thanks for your contribution to the servers list. This has been merged in this combined PR: {combined_pr_url}
+    comment_body = f"""Thanks for your contribution to the servers list. This has been merged in this combined PR: {combined_pr_url}
 
 This is a new process we're trying out, so if you see any issues feel free to re-open the PR and tag me."""
     
