@@ -3,7 +3,7 @@
 Script to comment on and close original PRs that were merged into a combined PR.
 
 This script:
-1. Parses a combined PR description to extract original PR numbers and authors
+1. Parses a combined PR description to extract original PR numbers
 2. For each original PR:
    - Adds a comment thanking the contributor and linking to the combined PR
    - Closes the PR without merging it
@@ -68,18 +68,17 @@ def fetch_pr_description(pr_url: str) -> Optional[str]:
 
 def parse_pr_description(description: str) -> List[Dict[str, str]]:
     """Parse PR description to extract original PR information."""
-    # Pattern to match: - **[Server Name](url)** ([PR #1234](pr_url)) by @username
-    pattern = r'- \*\*\[([^\]]+)\]\([^)]+\)\*\* \(\[PR #(\d+)\]\([^)]+\)\) by @(\w+)'
+    # Pattern to match: - **[Server Name](url)** ([PR #1234](pr_url))
+    pattern = r'- \*\*\[([^\]]+)\]\([^)]+\)\*\* \(\[PR #(\d+)\]\([^)]+\)\)'
     
     matches = re.findall(pattern, description)
     
     prs = []
     for match in matches:
-        server_name, pr_number, username = match
+        server_name, pr_number = match
         prs.append({
             'server_name': server_name.strip(),
-            'pr_number': int(pr_number),
-            'username': username.strip()
+            'pr_number': int(pr_number)
         })
     
     return prs
@@ -107,7 +106,7 @@ def check_pr_status(pr_number: int) -> Optional[Dict]:
         print(f"Error parsing PR status response: {e}")
         return None
 
-def add_comment_to_pr(pr_number: int, username: str, combined_pr_url: str, dry_run: bool = False) -> bool:
+def add_comment_to_pr(pr_number: int, combined_pr_url: str, dry_run: bool = False) -> bool:
     """Add a comment to the original PR."""
     comment_body = f"""Thanks for your contribution to the servers list. This has been merged in this combined PR: {combined_pr_url}
 
@@ -161,10 +160,9 @@ def close_pr(pr_number: int, dry_run: bool = False) -> bool:
 def process_pr(pr_info: Dict, combined_pr_url: str, dry_run: bool = False) -> Dict:
     """Process a single PR (comment and close)."""
     pr_number = pr_info['pr_number']
-    username = pr_info['username']
     server_name = pr_info['server_name']
     
-    print(f"  Processing PR #{pr_number}: {server_name} by @{username}")
+    print(f"  Processing PR #{pr_number}: {server_name}")
     
     # Check PR status first
     status = check_pr_status(pr_number)
@@ -197,7 +195,7 @@ def process_pr(pr_info: Dict, combined_pr_url: str, dry_run: bool = False) -> Di
         }
     
     # Add comment
-    comment_success = add_comment_to_pr(pr_number, username, combined_pr_url, dry_run)
+    comment_success = add_comment_to_pr(pr_number, combined_pr_url, dry_run)
     if not comment_success and not dry_run:
         return {
             'pr_number': pr_number,
@@ -235,7 +233,7 @@ def process_pr_batch(prs: List[Dict], combined_pr_url: str, batch_num: int, tota
     # Show preview
     print("PRs in this batch:")
     for pr in prs:
-        print(f"  - PR #{pr['pr_number']}: {pr['server_name']} by @{pr['username']}")
+        print(f"  - PR #{pr['pr_number']}: {pr['server_name']}")
     
     # Ask for confirmation (unless auto-confirm or dry-run)
     if not auto_confirm and not dry_run:
@@ -356,7 +354,7 @@ def main():
     # Show preview of first few PRs
     print("\nFirst 5 PRs found:")
     for pr in prs[:5]:
-        print(f"  - PR #{pr['pr_number']}: {pr['server_name']} by @{pr['username']}")
+        print(f"  - PR #{pr['pr_number']}: {pr['server_name']}")
     if len(prs) > 5:
         print(f"  ... and {len(prs) - 5} more")
     
