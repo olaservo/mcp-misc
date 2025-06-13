@@ -269,7 +269,7 @@ def create_batches(prs: List[Dict], batch_size: int = 10) -> List[List[Dict]]:
 def log_results(results: List[Dict], combined_pr_url: str, dry_run: bool):
     """Log the results to a file."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.join(script_dir, 'outputs')
+    output_dir = os.path.join(script_dir, 'output')
     os.makedirs(output_dir, exist_ok=True)
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
