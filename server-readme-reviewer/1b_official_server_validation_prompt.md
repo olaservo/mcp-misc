@@ -12,6 +12,10 @@ Since this is an official repository for MCP, our job is to review each link to 
 - There are no red flags related to security or other aspects of the repo
 - There MUST be documentation that indicates how to install it
 
+**IMPORTANT: Before validating each server, check if the `Validation_Status` column is already marked as "Valid". If it is, this indicates the PR was already approved and you should skip validation for that server - simply copy the row as-is to your output CSV.**
+
+For servers that need validation (where `Validation_Status` is empty):
+
 Use the `fetch` tool to look at the first chunk of each repo's Readme and then create a new csv which labels the result of the validation.  You MUST check each link explicitly to ensure it meets these minimum requirements.
 
 If we are over 90% confident the link is for a legitimate server, mark it as Valid.  Otherwise, mark it as either Potentially Valid or Invalid corresponding to your confidence level.

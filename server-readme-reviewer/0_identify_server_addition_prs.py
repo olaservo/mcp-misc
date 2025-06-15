@@ -9,11 +9,12 @@ This script:
   * If PR has 'add-official-server' label → categorized as 'official'
   * If PR has 'add-community-server' label → categorized as 'community'
   * Otherwise, uses fallback logic (icons or 'official' in title → official, else community)
+- Checks PR approval status and pre-populates validation columns for approved PRs
 - Automatically fixes missing alt text in img tags using the server name
-- Outputs results to batched CSV files (sorted alphabetically by server name)
+- Outputs results to batched CSV files with full validation columns (sorted alphabetically by server name)
 
 Usage:
-    # Default usage with batch size 10
+    # Default usage with batch size 10 and approval checking
     python 0_identify_server_addition_prs.py
     
     # Custom batch size
@@ -230,6 +231,77 @@ def fetch_pr_diff(pr_number: int) -> Optional[str]:
         print(f"Error fetching diff for PR #{pr_number}: {e}")
         return None
 
+def check_pr_approval_status(pr_number: int) -> Dict[str, any]:
+    """
+    Check if a PR has been approved by fetching its reviews.
+    
+    Returns:
+        Dict with approval info: {
+            'is_approved': bool,
+            'approval_count': int,
+            'approver': str (first approver username),
+            'approval_date': str (ISO format),
+            'error': str (if any error occurred)
+        }
+    """
+    try:
+        cmd = [
+            'gh', 'api', f'repos/modelcontextprotocol/servers/pulls/{pr_number}/reviews',
+            '--jq', '[.[] | select(.state == "APPROVED")] | map({user: .user.login, submitted_at: .submitted_at}) | sort_by(.submitted_at)'
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8', errors='replace')
+        
+        if not result.stdout or not result.stdout.strip():
+            return {
+                'is_approved': False,
+                'approval_count': 0,
+                'approver': '',
+                'approval_date': '',
+                'error': None
+            }
+        
+        approvals = json.loads(result.stdout)
+        
+        if not approvals:
+            return {
+                'is_approved': False,
+                'approval_count': 0,
+                'approver': '',
+                'approval_date': '',
+                'error': None
+            }
+        
+        # Get the first (earliest) approval
+        first_approval = approvals[0]
+        
+        return {
+            'is_approved': True,
+            'approval_count': len(approvals),
+            'approver': first_approval['user'],
+            'approval_date': first_approval['submitted_at'],
+            'error': None
+        }
+        
+    except subprocess.CalledProcessError as e:
+        print(f"    Warning: Error checking approval status for PR #{pr_number}: {e}")
+        return {
+            'is_approved': False,
+            'approval_count': 0,
+            'approver': '',
+            'approval_date': '',
+            'error': str(e)
+        }
+    except json.JSONDecodeError as e:
+        print(f"    Warning: Error parsing approval response for PR #{pr_number}: {e}")
+        return {
+            'is_approved': False,
+            'approval_count': 0,
+            'approver': '',
+            'approval_date': '',
+            'error': f"JSON decode error: {e}"
+        }
+
 def fetch_all_prs(state: str = 'open', per_page: int = 20, start_page: int = 1, max_pages: int = None) -> List[Dict]:
     """Fetch all PRs using pagination."""
     all_prs = []
@@ -340,6 +412,24 @@ def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
     
     print(f"    ✓ Found {category} server addition: {server_info['server_name']}")
     
+    # Check approval status
+    print(f"    Checking approval status...")
+    approval_info = check_pr_approval_status(pr_number)
+    if approval_info['is_approved']:
+        print(f"    ✓ PR is approved by {approval_info['approver']} ({approval_info['approval_count']} approval(s))")
+    else:
+        print(f"    - PR not yet approved")
+    
+    # Prepare validation columns based on approval status
+    if approval_info['is_approved']:
+        validation_status = "Valid"
+        confidence_level = "100%"
+        validation_notes = f"Pre-approved PR - skipping manual validation (approved by {approval_info['approver']})"
+    else:
+        validation_status = ""
+        confidence_level = ""
+        validation_notes = ""
+    
     return {
         'pr_number': pr_number,
         'pr_title': pr_title,
@@ -347,11 +437,20 @@ def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
         'server_url': server_info['server_url'],
         'server_name': server_info['server_name'],
         'pr_author': pr_author,
-        'category': category
+        'category': category,
+        # Approval metadata
+        'is_approved': approval_info['is_approved'],
+        'approval_count': approval_info['approval_count'],
+        'approver': approval_info['approver'],
+        'approval_date': approval_info['approval_date'],
+        # Validation columns (pre-populated for approved PRs)
+        'validation_status': validation_status,
+        'confidence_level': confidence_level,
+        'validation_notes': validation_notes
     }
 
 def write_csv_file(results: List[Dict], filename: str):
-    """Write results to a single CSV file, sorted alphabetically by server name."""
+    """Write results to a single CSV file with full validation columns, sorted alphabetically by server name."""
     # Sort results by server_name (case-insensitive)
     sorted_results = sorted(results, key=lambda x: x['server_name'].lower())
     
@@ -361,7 +460,12 @@ def write_csv_file(results: List[Dict], filename: str):
         print(f"  Last entry after sorting: {sorted_results[-1]['server_name']}")
     
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-        fieldnames = ['PR_Number', 'PR_Title', 'Complete_Line', 'Server_URL', 'Server_Name', 'PR_Author', 'Category']
+        # Include all validation columns to match the expected format
+        fieldnames = [
+            'PR_Number', 'PR_Title', 'Complete_Line', 'Server_URL', 'Server_Name', 'PR_Author', 'Category',
+            'Validation_Status', 'Is_Valid_Confidence_Level', 'Validation_Notes',
+            'Is_Approved', 'Approval_Count', 'Approver', 'Approval_Date'
+        ]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         
         writer.writeheader()
@@ -374,7 +478,14 @@ def write_csv_file(results: List[Dict], filename: str):
                 'Server_URL': result['server_url'],
                 'Server_Name': result['server_name'],
                 'PR_Author': result['pr_author'],
-                'Category': result['category']
+                'Category': result['category'],
+                'Validation_Status': result.get('validation_status', ''),
+                'Is_Valid_Confidence_Level': result.get('confidence_level', ''),
+                'Validation_Notes': result.get('validation_notes', ''),
+                'Is_Approved': result.get('is_approved', False),
+                'Approval_Count': result.get('approval_count', 0),
+                'Approver': result.get('approver', ''),
+                'Approval_Date': result.get('approval_date', '')
             })
 
 def write_batched_results(results: List[Dict], output_prefix: str = 'server_addition_prs', batch_size: int = 10):
