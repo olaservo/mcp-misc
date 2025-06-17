@@ -358,6 +358,11 @@ def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
     
     print(f"  Analyzing PR #{pr_number}: {pr_title}")
     
+    # Skip PRs that are adding resources, not servers
+    if 'add-community-resource' in pr.get('labels', []):
+        print(f"    Skipping - PR is adding a resource, not a server")
+        return None
+    
     # Fetch the diff
     diff = fetch_pr_diff(pr_number)
     if not diff:
