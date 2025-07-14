@@ -12,6 +12,8 @@ This script:
 - Checks PR approval status and pre-populates validation columns for approved PRs
 - Automatically fixes missing alt text in img tags using the server name
 - Outputs results to batched CSV files with full validation columns (sorted alphabetically by server name)
+- Logs all decisions with detailed reasoning for both accepted and rejected PRs
+- Creates a comprehensive log file and optional rejected PRs CSV for audit trail
 
 Usage:
     # Default usage with batch size 10 and approval checking
@@ -22,6 +24,18 @@ Usage:
     
     # Control pagination
     python 0_identify_server_addition_prs.py --max-pages 5 --per-page 30
+    
+    # Enable debug logging
+    python 0_identify_server_addition_prs.py --log-level DEBUG
+    
+    # Skip rejected PRs CSV
+    python 0_identify_server_addition_prs.py --no-rejected-csv
+
+Output Files:
+    - server_addition_prs_official_batch_N.csv: Batched official server PRs
+    - server_addition_prs_community_batch_N.csv: Batched community server PRs
+    - server_pr_analysis_YYYYMMDD_HHMMSS.log: Detailed analysis log
+    - rejected_prs_YYYYMMDD_HHMMSS.csv: Rejected PRs with reasons (optional)
 """
 
 import subprocess
@@ -31,6 +45,8 @@ import re
 import sys
 import argparse
 import os
+import logging
+from datetime import datetime
 from typing import List, Dict, Optional
 import time
 
@@ -110,11 +126,11 @@ def fix_img_alt_text(line: str, server_name: str) -> str:
 
 def extract_server_info_from_line(line: str) -> Optional[Dict[str, str]]:
     """Extract server information from a README line and fix alt text if needed."""
-    # Pattern for server entries with icons
-    icon_pattern = r'^\s*-\s+(<img[^>]*>)\s+\*\*\[([^\]]+)\]\(([^)]+)\)\*\*\s*-\s*(.+)$'
+    # Pattern for server entries with icons - now allows optional content before the dash
+    icon_pattern = r'^\s*-\s+(<img[^>]*>)\s+\*\*\[([^\]]+)\]\(([^)]+)\)\*\*\s*(.*?)\s*-\s*(.+)$'
     
-    # Pattern for server entries without icons
-    no_icon_pattern = r'^\s*-\s+\*\*\[([^\]]+)\]\(([^)]+)\)\*\*\s*-\s*(.+)$'
+    # Pattern for server entries without icons - now allows optional content before the dash
+    no_icon_pattern = r'^\s*-\s+\*\*\[([^\]]+)\]\(([^)]+)\)\*\*\s*(.*?)\s*-\s*(.+)$'
     
     # Try icon pattern first
     icon_match = re.match(icon_pattern, line.strip())
@@ -122,13 +138,17 @@ def extract_server_info_from_line(line: str) -> Optional[Dict[str, str]]:
         img_tag = icon_match.group(1)
         server_name = icon_match.group(2)
         server_url = icon_match.group(3)
-        description = icon_match.group(4)
+        attribution = icon_match.group(4).strip()
+        description = icon_match.group(5)
         
         # Fix alt text in the img tag
         fixed_img_tag = fix_img_alt_text(img_tag, server_name)
         
         # Reconstruct the complete line with fixed img tag
-        fixed_line = f"- {fixed_img_tag} **[{server_name}]({server_url})** - {description}"
+        if attribution:
+            fixed_line = f"- {fixed_img_tag} **[{server_name}]({server_url})** {attribution} - {description}"
+        else:
+            fixed_line = f"- {fixed_img_tag} **[{server_name}]({server_url})** - {description}"
         
         return {
             'server_name': server_name,
@@ -142,13 +162,20 @@ def extract_server_info_from_line(line: str) -> Optional[Dict[str, str]]:
     if no_icon_match:
         server_name = no_icon_match.group(1)
         server_url = no_icon_match.group(2)
-        description = no_icon_match.group(3)
+        attribution = no_icon_match.group(3).strip()
+        description = no_icon_match.group(4)
+        
+        # Reconstruct the complete line
+        if attribution:
+            fixed_line = f"- **[{server_name}]({server_url})** {attribution} - {description}"
+        else:
+            fixed_line = f"- **[{server_name}]({server_url})** - {description}"
         
         return {
             'server_name': server_name,
             'server_url': server_url,
             'description': description,
-            'complete_line': line.strip()
+            'complete_line': fixed_line
         }
     
     return None
@@ -178,6 +205,98 @@ def categorize_server_by_labels(pr_labels: List[str], complete_line: str) -> str
     
     # Fallback to existing logic
     return categorize_server(complete_line)
+
+# Global variables for logging
+logger = None
+rejected_prs = []
+
+def setup_logging(output_dir: str, log_level: str = 'INFO') -> logging.Logger:
+    """Set up logging configuration with both file and console handlers."""
+    global logger
+    
+    # Create timestamp for log files
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # Create logger
+    logger = logging.getLogger('server_pr_analyzer')
+    logger.setLevel(getattr(logging, log_level.upper()))
+    
+    # Clear any existing handlers
+    logger.handlers.clear()
+    
+    # Create formatters
+    detailed_formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    console_formatter = logging.Formatter('%(message)s')
+    
+    # File handler for detailed logging
+    log_file = os.path.join(output_dir, f'server_pr_analysis_{timestamp}.log')
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(detailed_formatter)
+    logger.addHandler(file_handler)
+    
+    # Console handler for user-friendly output
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
+    
+    logger.info(f"Logging initialized. Log file: {log_file}")
+    return logger
+
+def log_rejection(pr: Dict, reason: str, details: str = ""):
+    """Log a rejected PR with reason and details."""
+    global rejected_prs, logger
+    
+    rejection_entry = {
+        'pr_number': pr['number'],
+        'pr_title': pr['title'],
+        'pr_author': pr['user'],
+        'rejection_reason': reason,
+        'analysis_details': details,
+        'labels': ', '.join(pr.get('labels', [])),
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    rejected_prs.append(rejection_entry)
+    
+    if logger:
+        logger.debug(f"REJECTED PR #{pr['number']}: {reason} - {details}")
+
+def write_rejected_prs_csv(output_dir: str):
+    """Write rejected PRs to a CSV file."""
+    global rejected_prs
+    
+    if not rejected_prs:
+        return None
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = os.path.join(output_dir, f'rejected_prs_{timestamp}.csv')
+    
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        fieldnames = [
+            'PR_Number', 'PR_Title', 'PR_Author', 'Rejection_Reason', 
+            'Analysis_Details', 'Labels', 'Timestamp'
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        
+        writer.writeheader()
+        
+        for rejection in rejected_prs:
+            writer.writerow({
+                'PR_Number': rejection['pr_number'],
+                'PR_Title': rejection['pr_title'],
+                'PR_Author': rejection['pr_author'],
+                'Rejection_Reason': rejection['rejection_reason'],
+                'Analysis_Details': rejection['analysis_details'],
+                'Labels': rejection['labels'],
+                'Timestamp': rejection['timestamp']
+            })
+    
+    return filename
 
 def fetch_prs_page(page: int, per_page: int = 20, state: str = 'open') -> List[Dict]:
     """Fetch a single page of PRs using GitHub API."""
@@ -352,26 +471,36 @@ def fetch_all_prs(state: str = 'open', per_page: int = 20, start_page: int = 1, 
 
 def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
     """Analyze a PR to see if it's adding a single server to the README."""
+    global logger
+    
     pr_number = pr['number']
     pr_title = pr['title']
     pr_author = pr['user']
     
     print(f"  Analyzing PR #{pr_number}: {pr_title}")
+    if logger:
+        logger.info(f"Analyzing PR #{pr_number}: {pr_title} by {pr_author}")
     
     # Skip PRs that are adding resources, not servers
     if 'add-community-resource' in pr.get('labels', []):
-        print(f"    Skipping - PR is adding a resource, not a server")
+        reason = "PR is adding a resource, not a server"
+        print(f"    Skipping - {reason}")
+        log_rejection(pr, "Resource Addition", reason)
         return None
     
     # Fetch the diff
     diff = fetch_pr_diff(pr_number)
     if not diff:
+        reason = "Could not fetch diff from GitHub API"
         print(f"    Could not fetch diff")
+        log_rejection(pr, "Diff Fetch Failed", reason)
         return None
     
     # Look for README.md changes
     if 'README.md' not in diff:
+        reason = "No changes to README.md file"
         print(f"    No README.md changes")
+        log_rejection(pr, "No README Changes", reason)
         return None
     
     # Split diff into lines and look for additions
@@ -391,9 +520,13 @@ def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
     # We only want PRs that add exactly one server line
     if len(added_lines) != 1:
         if len(added_lines) > 1:
+            reason = f"Adding multiple server lines ({len(added_lines)} lines)"
             print(f"    Adding multiple lines ({len(added_lines)}), skipping")
+            log_rejection(pr, "Multiple Server Lines", reason)
         else:
+            reason = "No valid server entries found in diff additions"
             print(f"    No server entries found in additions")
+            log_rejection(pr, "No Server Entries", reason)
         return None
     
     # Check that there are no other significant additions (to avoid PRs that modify multiple lines)
@@ -406,7 +539,9 @@ def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
                 non_server_additions += 1
     
     if non_server_additions > 2:  # Allow for some minor additions like whitespace
+        reason = f"Too many non-server additions ({non_server_additions} lines)"
         print(f"    Too many non-server additions ({non_server_additions}), skipping")
+        log_rejection(pr, "Too Many Changes", reason)
         return None
     
     original_line, server_info = added_lines[0]
@@ -416,14 +551,20 @@ def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
     category = categorize_server_by_labels(pr.get('labels', []), complete_line)
     
     print(f"    ✓ Found {category} server addition: {server_info['server_name']}")
+    if logger:
+        logger.info(f"ACCEPTED PR #{pr_number}: {category} server '{server_info['server_name']}' by {pr_author}")
     
     # Check approval status
     print(f"    Checking approval status...")
     approval_info = check_pr_approval_status(pr_number)
     if approval_info['is_approved']:
         print(f"    ✓ PR is approved by {approval_info['approver']} ({approval_info['approval_count']} approval(s))")
+        if logger:
+            logger.info(f"PR #{pr_number} is pre-approved by {approval_info['approver']}")
     else:
         print(f"    - PR not yet approved")
+        if logger:
+            logger.debug(f"PR #{pr_number} not yet approved")
     
     # Prepare validation columns based on approval status
     if approval_info['is_approved']:
@@ -552,23 +693,40 @@ def write_batched_results(results: List[Dict], output_prefix: str = 'server_addi
 
 def main():
     """Main function to fetch PRs and write batched results."""
+    global logger, rejected_prs
+    
     parser = argparse.ArgumentParser(description='Identify open PRs that are adding servers to the README and output batched CSV files')
     
     parser.add_argument('--per-page', type=int, default=20, choices=range(1, 101),
                        help='PRs per page (1-100, default: 20)')
     parser.add_argument('--start-page', type=int, default=1,
                        help='Starting page number (default: 1)')
-    parser.add_argument('--max-pages', type=int, default=10,
-                       help='Maximum number of pages to process (default: 10)')
+    parser.add_argument('--max-pages', type=int, default=20,
+                       help='Maximum number of pages to process (default: 20)')
     parser.add_argument('--output-prefix', default='server_addition_prs',
                        help='Output CSV filename prefix (default: server_addition_prs)')
     parser.add_argument('--batch-size', type=int, default=10,
                        help='Number of servers per batch (default: 10)')
+    parser.add_argument('--log-level', default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                       help='Logging level (default: INFO)')
+    parser.add_argument('--no-rejected-csv', action='store_true',
+                       help='Skip creating rejected PRs CSV file')
     
     args = parser.parse_args()
     
+    # Set up output directory and logging
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    output_dir = os.path.join(script_dir, 'output')
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Initialize logging
+    logger = setup_logging(output_dir, args.log_level)
+    
     print("=== MCP Server Addition PR Identifier ===")
     print(f"Fetching open PRs to identify server additions to README")
+    logger.info("=== MCP Server Addition PR Identifier Started ===")
+    logger.info(f"Configuration: per_page={args.per_page}, start_page={args.start_page}, max_pages={args.max_pages}")
+    logger.info(f"Output: prefix={args.output_prefix}, batch_size={args.batch_size}")
     print()
     
     # Fetch all PRs using pagination
@@ -581,12 +739,16 @@ def main():
     
     if not all_prs:
         print("No PRs found!")
+        logger.warning("No PRs found!")
         return
     
+    logger.info(f"Fetched {len(all_prs)} PRs for analysis")
     print(f"\n=== Analyzing {len(all_prs)} PRs for server additions ===")
     
     # Process each PR
     results = []
+    accepted_count = 0
+    rejected_count = 0
     
     for i, pr in enumerate(all_prs, 1):
         print(f"\n[{i}/{len(all_prs)}] Processing PR #{pr['number']}")
@@ -596,9 +758,15 @@ def main():
         
         if server_addition:
             results.append(server_addition)
+            accepted_count += 1
             print(f"  ✓ Added to results")
         else:
+            rejected_count += 1
             print(f"  - Not a server addition PR")
+        
+        # Show running totals every 10 PRs
+        if i % 10 == 0:
+            print(f"    Progress: Analyzed {i}/{len(all_prs)} PRs | Accepted: {accepted_count} | Rejected: {rejected_count}")
         
         # Small delay to be nice to the API
         time.sleep(0.2)
@@ -607,6 +775,9 @@ def main():
     print(f"\n=== Final Summary ===")
     print(f"Total PRs analyzed: {len(all_prs)}")
     print(f"PRs adding servers to README: {len(results)}")
+    print(f"PRs rejected: {len(rejected_prs)}")
+    
+    logger.info(f"Analysis complete: {len(all_prs)} PRs analyzed, {len(results)} accepted, {len(rejected_prs)} rejected")
     
     if results:
         write_batched_results(
@@ -621,6 +792,7 @@ def main():
         
         print(f"\n=== Server Addition PRs by Category ===")
         print(f"Official servers: {official_count}")
+        logger.info(f"Official servers: {official_count}")
         if official_count > 0:
             official_servers = [r for r in results if r['category'] == 'official']
             for result in official_servers[:5]:  # Show first 5
@@ -629,6 +801,7 @@ def main():
                 print(f"  ... and {official_count - 5} more")
         
         print(f"\nCommunity servers: {community_count}")
+        logger.info(f"Community servers: {community_count}")
         if community_count > 0:
             community_servers = [r for r in results if r['category'] == 'community']
             for result in community_servers[:5]:  # Show first 5
@@ -636,7 +809,27 @@ def main():
             if community_count > 5:
                 print(f"  ... and {community_count - 5} more")
     
+    # Write rejected PRs CSV if requested and there are rejections
+    if not args.no_rejected_csv and rejected_prs:
+        rejected_csv_file = write_rejected_prs_csv(output_dir)
+        if rejected_csv_file:
+            print(f"\n=== Rejected PRs Log ===")
+            print(f"Rejected PRs saved to: {os.path.basename(rejected_csv_file)}")
+            logger.info(f"Rejected PRs CSV written: {rejected_csv_file}")
+            
+            # Show rejection reason breakdown
+            rejection_reasons = {}
+            for rejection in rejected_prs:
+                reason = rejection['rejection_reason']
+                rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
+            
+            print(f"Rejection reasons breakdown:")
+            for reason, count in sorted(rejection_reasons.items(), key=lambda x: x[1], reverse=True):
+                print(f"  {reason}: {count} PRs")
+                logger.info(f"Rejection reason '{reason}': {count} PRs")
+    
     print(f"\nComplete! Results saved to CSV files.")
+    logger.info("=== MCP Server Addition PR Identifier Completed ===")
 
 if __name__ == "__main__":
     main()
