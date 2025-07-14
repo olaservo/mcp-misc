@@ -4,7 +4,8 @@ Script to identify open PRs that are adding servers to the README and output the
 
 This script:
 - Fetches open PRs from the modelcontextprotocol/servers repository using proper pagination
-- Identifies which PRs are adding a single server entry to the README
+- Identifies which PRs are adding server entries to the README (single or multiple)
+- Automatically splits multi-server PRs into individual server entries with suffix numbering
 - Categorizes servers using label-based logic with fallback:
   * If PR has 'add-official-server' label → categorized as 'official'
   * If PR has 'add-community-server' label → categorized as 'community'
@@ -16,7 +17,7 @@ This script:
 - Creates a comprehensive log file and optional rejected PRs CSV for audit trail
 
 Usage:
-    # Default usage with batch size 10 and approval checking
+    # Default usage with batch size 10, approval checking, and auto-splitting enabled
     python 0_identify_server_addition_prs.py
     
     # Custom batch size
@@ -24,6 +25,12 @@ Usage:
     
     # Control pagination
     python 0_identify_server_addition_prs.py --max-pages 5 --per-page 30
+    
+    # Disable auto-splitting (original behavior)
+    python 0_identify_server_addition_prs.py --no-split-multiple-servers
+    
+    # Set maximum servers per PR for splitting
+    python 0_identify_server_addition_prs.py --max-servers-per-pr 5
     
     # Enable debug logging
     python 0_identify_server_addition_prs.py --log-level DEBUG
@@ -469,8 +476,8 @@ def fetch_all_prs(state: str = 'open', per_page: int = 20, start_page: int = 1, 
     print(f"\nPagination complete! Fetched {len(all_prs)} unique PRs across {page - start_page} pages")
     return all_prs
 
-def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
-    """Analyze a PR to see if it's adding a single server to the README."""
+def analyze_pr_for_server_addition(pr: Dict, split_multiple_servers: bool = True, max_servers_per_pr: int = 10) -> Optional[List[Dict[str, str]]]:
+    """Analyze a PR to see if it's adding server(s) to the README."""
     global logger
     
     pr_number = pr['number']
@@ -517,16 +524,25 @@ def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
             if server_info:
                 added_lines.append((added_line, server_info))
     
-    # We only want PRs that add exactly one server line
-    if len(added_lines) != 1:
-        if len(added_lines) > 1:
-            reason = f"Adding multiple server lines ({len(added_lines)} lines)"
-            print(f"    Adding multiple lines ({len(added_lines)}), skipping")
-            log_rejection(pr, "Multiple Server Lines", reason)
-        else:
-            reason = "No valid server entries found in diff additions"
-            print(f"    No server entries found in additions")
-            log_rejection(pr, "No Server Entries", reason)
+    # Check if we found any server entries
+    if len(added_lines) == 0:
+        reason = "No valid server entries found in diff additions"
+        print(f"    No server entries found in additions")
+        log_rejection(pr, "No Server Entries", reason)
+        return None
+    
+    # Check if we have too many servers for splitting
+    if len(added_lines) > max_servers_per_pr:
+        reason = f"Too many server lines ({len(added_lines)} > {max_servers_per_pr} max)"
+        print(f"    Too many server lines ({len(added_lines)}), exceeds limit of {max_servers_per_pr}")
+        log_rejection(pr, "Exceeds Server Limit", reason)
+        return None
+    
+    # Handle multiple servers based on split_multiple_servers setting
+    if len(added_lines) > 1 and not split_multiple_servers:
+        reason = f"Adding multiple server lines ({len(added_lines)} lines) - splitting disabled"
+        print(f"    Adding multiple lines ({len(added_lines)}), skipping (splitting disabled)")
+        log_rejection(pr, "Multiple Server Lines", reason)
         return None
     
     # Check that there are no other significant additions (to avoid PRs that modify multiple lines)
@@ -538,23 +554,15 @@ def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
             if added_line and not extract_server_info_from_line(line[1:]):
                 non_server_additions += 1
     
-    if non_server_additions > 2:  # Allow for some minor additions like whitespace
+    # Be more lenient with non-server additions for multi-server PRs
+    max_non_server_additions = 2 + len(added_lines)  # Allow more for multi-server PRs
+    if non_server_additions > max_non_server_additions:
         reason = f"Too many non-server additions ({non_server_additions} lines)"
         print(f"    Too many non-server additions ({non_server_additions}), skipping")
         log_rejection(pr, "Too Many Changes", reason)
         return None
     
-    original_line, server_info = added_lines[0]
-    
-    # Use the fixed complete line from server_info (which has alt text fixed)
-    complete_line = server_info['complete_line']
-    category = categorize_server_by_labels(pr.get('labels', []), complete_line)
-    
-    print(f"    ✓ Found {category} server addition: {server_info['server_name']}")
-    if logger:
-        logger.info(f"ACCEPTED PR #{pr_number}: {category} server '{server_info['server_name']}' by {pr_author}")
-    
-    # Check approval status
+    # Check approval status once for the entire PR
     print(f"    Checking approval status...")
     approval_info = check_pr_approval_status(pr_number)
     if approval_info['is_approved']:
@@ -566,34 +574,67 @@ def analyze_pr_for_server_addition(pr: Dict) -> Optional[Dict[str, str]]:
         if logger:
             logger.debug(f"PR #{pr_number} not yet approved")
     
-    # Prepare validation columns based on approval status
-    if approval_info['is_approved']:
-        validation_status = "Valid"
-        confidence_level = "100%"
-        validation_notes = f"Pre-approved PR - skipping manual validation (approved by {approval_info['approver']})"
-    else:
-        validation_status = ""
-        confidence_level = ""
-        validation_notes = ""
+    # Process each server entry
+    server_entries = []
     
-    return {
-        'pr_number': pr_number,
-        'pr_title': pr_title,
-        'complete_line': complete_line,
-        'server_url': server_info['server_url'],
-        'server_name': server_info['server_name'],
-        'pr_author': pr_author,
-        'category': category,
-        # Approval metadata
-        'is_approved': approval_info['is_approved'],
-        'approval_count': approval_info['approval_count'],
-        'approver': approval_info['approver'],
-        'approval_date': approval_info['approval_date'],
-        # Validation columns (pre-populated for approved PRs)
-        'validation_status': validation_status,
-        'confidence_level': confidence_level,
-        'validation_notes': validation_notes
-    }
+    for i, (original_line, server_info) in enumerate(added_lines):
+        # Create suffix for multiple servers
+        suffix = f"-{i+1}" if len(added_lines) > 1 else ""
+        display_pr_number = f"{pr_number}{suffix}"
+        
+        # Use the fixed complete line from server_info (which has alt text fixed)
+        complete_line = server_info['complete_line']
+        category = categorize_server_by_labels(pr.get('labels', []), complete_line)
+        
+        # Prepare validation columns based on approval status
+        if approval_info['is_approved']:
+            validation_status = "Valid"
+            confidence_level = "100%"
+            validation_notes = f"Pre-approved PR - skipping manual validation (approved by {approval_info['approver']})"
+        else:
+            validation_status = ""
+            confidence_level = ""
+            validation_notes = ""
+        
+        server_entry = {
+            'pr_number': display_pr_number,
+            'original_pr_number': pr_number,
+            'server_index': i + 1,
+            'total_servers_in_pr': len(added_lines),
+            'pr_title': pr_title,
+            'complete_line': complete_line,
+            'server_url': server_info['server_url'],
+            'server_name': server_info['server_name'],
+            'pr_author': pr_author,
+            'category': category,
+            # Approval metadata
+            'is_approved': approval_info['is_approved'],
+            'approval_count': approval_info['approval_count'],
+            'approver': approval_info['approver'],
+            'approval_date': approval_info['approval_date'],
+            # Validation columns (pre-populated for approved PRs)
+            'validation_status': validation_status,
+            'confidence_level': confidence_level,
+            'validation_notes': validation_notes
+        }
+        
+        server_entries.append(server_entry)
+    
+    # Log the results
+    if len(added_lines) == 1:
+        print(f"    ✓ Found {server_entries[0]['category']} server addition: {server_entries[0]['server_name']}")
+        if logger:
+            logger.info(f"ACCEPTED PR #{pr_number}: {server_entries[0]['category']} server '{server_entries[0]['server_name']}' by {pr_author}")
+    else:
+        print(f"    ✓ Found {len(added_lines)} server additions (split into individual entries):")
+        for entry in server_entries:
+            print(f"      - {entry['category']}: {entry['server_name']} (PR #{entry['pr_number']})")
+        if logger:
+            logger.info(f"ACCEPTED PR #{pr_number}: Split into {len(added_lines)} server entries by {pr_author}")
+            for entry in server_entries:
+                logger.info(f"  - {entry['category']} server '{entry['server_name']}' (PR #{entry['pr_number']})")
+    
+    return server_entries
 
 def write_csv_file(results: List[Dict], filename: str):
     """Write results to a single CSV file with full validation columns, sorted alphabetically by server name."""
@@ -606,9 +647,10 @@ def write_csv_file(results: List[Dict], filename: str):
         print(f"  Last entry after sorting: {sorted_results[-1]['server_name']}")
     
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-        # Include all validation columns to match the expected format
+        # Include all validation columns plus new metadata columns for split PRs
         fieldnames = [
-            'PR_Number', 'PR_Title', 'Complete_Line', 'Server_URL', 'Server_Name', 'PR_Author', 'Category',
+            'PR_Number', 'Original_PR_Number', 'Server_Index', 'Total_Servers_In_PR', 
+            'PR_Title', 'Complete_Line', 'Server_URL', 'Server_Name', 'PR_Author', 'Category',
             'Validation_Status', 'Is_Valid_Confidence_Level', 'Validation_Notes',
             'Is_Approved', 'Approval_Count', 'Approver', 'Approval_Date'
         ]
@@ -619,6 +661,9 @@ def write_csv_file(results: List[Dict], filename: str):
         for result in sorted_results:
             writer.writerow({
                 'PR_Number': result['pr_number'],
+                'Original_PR_Number': result.get('original_pr_number', result['pr_number']),
+                'Server_Index': result.get('server_index', 1),
+                'Total_Servers_In_PR': result.get('total_servers_in_pr', 1),
                 'PR_Title': result['pr_title'],
                 'Complete_Line': result['complete_line'],
                 'Server_URL': result['server_url'],
@@ -711,6 +756,10 @@ def main():
                        help='Logging level (default: INFO)')
     parser.add_argument('--no-rejected-csv', action='store_true',
                        help='Skip creating rejected PRs CSV file')
+    parser.add_argument('--no-split-multiple-servers', action='store_true',
+                       help='Disable auto-splitting of multi-server PRs (original behavior)')
+    parser.add_argument('--max-servers-per-pr', type=int, default=10,
+                       help='Maximum servers per PR for splitting (default: 10)')
     
     args = parser.parse_args()
     
@@ -750,14 +799,22 @@ def main():
     accepted_count = 0
     rejected_count = 0
     
+    # Configure splitting behavior
+    split_multiple_servers = not args.no_split_multiple_servers
+    
     for i, pr in enumerate(all_prs, 1):
         print(f"\n[{i}/{len(all_prs)}] Processing PR #{pr['number']}")
         
         # Analyze PR for server addition
-        server_addition = analyze_pr_for_server_addition(pr)
+        server_entries = analyze_pr_for_server_addition(
+            pr, 
+            split_multiple_servers=split_multiple_servers,
+            max_servers_per_pr=args.max_servers_per_pr
+        )
         
-        if server_addition:
-            results.append(server_addition)
+        if server_entries:
+            # server_entries is now a list of server entries
+            results.extend(server_entries)
             accepted_count += 1
             print(f"  ✓ Added to results")
         else:
