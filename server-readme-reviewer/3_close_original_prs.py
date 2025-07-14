@@ -68,18 +68,30 @@ def fetch_pr_description(pr_url: str) -> Optional[str]:
 
 def parse_pr_description(description: str) -> List[Dict[str, str]]:
     """Parse PR description to extract original PR information."""
-    # Pattern to match: - **[Server Name](url)** ([PR #1234](pr_url))
-    pattern = r'- \*\*\[([^\]]+)\]\([^)]+\)\*\* \(\[PR #(\d+)\]\([^)]+\)\)'
+    # Pattern to match: - **[Server Name](url)** ([PR #1234-1](pr_url)) (server 1 of 2)
+    # or: - **[Server Name](url)** ([PR #1234](pr_url))
+    pattern = r'- \*\*\[([^\]]+)\]\([^)]+\)\*\* \(\[PR #([\d-]+)\]\([^)]+\)\)'
     
     matches = re.findall(pattern, description)
     
     prs = []
+    seen_original_prs = set()  # Track original PRs to avoid duplicates
+    
     for match in matches:
-        server_name, pr_number = match
-        prs.append({
-            'server_name': server_name.strip(),
-            'pr_number': int(pr_number)
-        })
+        server_name, pr_number_str = match
+        
+        # Extract original PR number from potentially split PR number (e.g., '1729-1' -> '1729')
+        original_pr_number = int(pr_number_str.split('-')[0])
+        
+        # Only add each original PR once (avoid duplicates from split PRs)
+        if original_pr_number not in seen_original_prs:
+            seen_original_prs.add(original_pr_number)
+            prs.append({
+                'server_name': server_name.strip(),
+                'pr_number': original_pr_number,
+                'display_pr': pr_number_str,  # Keep the display format for reference
+                'is_split_pr': '-' in pr_number_str
+            })
     
     return prs
 

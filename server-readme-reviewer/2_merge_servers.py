@@ -86,6 +86,9 @@ def collect_valid_servers(server_type: str) -> List[Dict]:
                         
                         valid_servers.append({
                             'pr_number': row.get('PR_Number', '').strip(),
+                            'original_pr_number': row.get('Original_PR_Number', '').strip(),
+                            'server_index': row.get('Server_Index', '1').strip(),
+                            'total_servers_in_pr': row.get('Total_Servers_In_PR', '1').strip(),
                             'server_name': server_name,
                             'server_url': row.get('Server_URL', '').strip(),
                             'complete_line': complete_line,
@@ -295,7 +298,16 @@ def generate_pr_description(servers: List[Dict], server_type: str) -> str:
     
     # List all servers with server names linking to their repository URLs
     for server in unique_servers:
-        description += f"- **[{server['server_name']}]({server['server_url']})** ([PR #{server['pr_number']}](https://github.com/modelcontextprotocol/servers/pull/{server['pr_number']})) by @{server['pr_author']}\n"
+        # Use original PR number for GitHub links, but display PR number for identification
+        original_pr = server.get('original_pr_number', server['pr_number'])
+        display_pr = server['pr_number']
+        
+        # Add split context if this is from a multi-server PR
+        split_context = ""
+        if server.get('total_servers_in_pr', '1') != '1':
+            split_context = f" (server {server.get('server_index', '1')} of {server.get('total_servers_in_pr', '1')})"
+        
+        description += f"- **[{server['server_name']}]({server['server_url']})** ([PR #{display_pr}](https://github.com/modelcontextprotocol/servers/pull/{original_pr})){split_context} by @{server['pr_author']}\n"
     
     return description
 
@@ -351,10 +363,17 @@ def log_changes(servers: List[Dict], readme_path: str, server_type: str):
         f.write("=" * 50 + "\n")
         
         for server in servers:
-            f.write(f"PR #{server['pr_number']}: {server['server_name']}\n")
+            # Add split PR context if applicable
+            split_info = ""
+            if server.get('total_servers_in_pr', '1') != '1':
+                split_info = f" (server {server.get('server_index', '1')} of {server.get('total_servers_in_pr', '1')} from original PR #{server.get('original_pr_number', server['pr_number'])})"
+            
+            f.write(f"PR #{server['pr_number']}: {server['server_name']}{split_info}\n")
             f.write(f"  Author: {server['pr_author']}\n")
             f.write(f"  URL: {server['server_url']}\n")
             f.write(f"  Category: {server['category']}\n")
+            if server.get('original_pr_number') and server['original_pr_number'] != server['pr_number']:
+                f.write(f"  Original PR: #{server['original_pr_number']}\n")
             f.write(f"  Line: {server['complete_line']}\n")
             f.write("\n")
     
