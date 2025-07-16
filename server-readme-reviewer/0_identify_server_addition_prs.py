@@ -577,10 +577,21 @@ def analyze_pr_for_server_addition(pr: Dict, split_multiple_servers: bool = True
     # Process each server entry
     server_entries = []
     
+    # Ensure pr_number is consistently handled as string for concatenation
+    pr_number_str = str(pr_number)
+    
     for i, (original_line, server_info) in enumerate(added_lines):
-        # Create suffix for multiple servers
-        suffix = f"-{i+1}" if len(added_lines) > 1 else ""
-        display_pr_number = f"{pr_number}{suffix}"
+        # Create suffix for multiple servers (1-indexed)
+        server_index = i + 1
+        suffix = f"-{server_index}" if len(added_lines) > 1 else ""
+        display_pr_number = f"{pr_number_str}{suffix}"
+        
+        # Log the PR number assignment for debugging
+        if logger:
+            if len(added_lines) > 1:
+                logger.debug(f"Split PR #{pr_number}: Server {server_index}/{len(added_lines)} -> PR #{display_pr_number}")
+            else:
+                logger.debug(f"Single server PR #{pr_number} -> PR #{display_pr_number}")
         
         # Use the fixed complete line from server_info (which has alt text fixed)
         complete_line = server_info['complete_line']
@@ -596,10 +607,16 @@ def analyze_pr_for_server_addition(pr: Dict, split_multiple_servers: bool = True
             confidence_level = ""
             validation_notes = ""
         
+        # Validate PR number format before creating entry
+        if not display_pr_number or not str(display_pr_number).strip():
+            if logger:
+                logger.error(f"Invalid display_pr_number generated: '{display_pr_number}' for PR #{pr_number}, server {server_index}")
+            continue
+        
         server_entry = {
             'pr_number': display_pr_number,
             'original_pr_number': pr_number,
-            'server_index': i + 1,
+            'server_index': server_index,
             'total_servers_in_pr': len(added_lines),
             'pr_title': pr_title,
             'complete_line': complete_line,
@@ -617,6 +634,10 @@ def analyze_pr_for_server_addition(pr: Dict, split_multiple_servers: bool = True
             'confidence_level': confidence_level,
             'validation_notes': validation_notes
         }
+        
+        # Additional validation logging
+        if logger:
+            logger.debug(f"Created server entry: PR #{display_pr_number}, Server: '{server_info['server_name']}', Category: {category}")
         
         server_entries.append(server_entry)
     

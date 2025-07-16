@@ -287,7 +287,7 @@ def generate_pr_description(servers: List[Dict], server_type: str) -> str:
         else:
             return int(pr_number_str)
     
-    unique_servers.sort(key=lambda x: (x['server_name'].lower(), get_original_pr_number(x['pr_number'])))
+    unique_servers.sort(key=lambda x: (get_original_pr_number(x['pr_number']), x['server_name'].lower()))
     
     # Generate title and description based on server type
     config = SERVER_CONFIGS[server_type]
