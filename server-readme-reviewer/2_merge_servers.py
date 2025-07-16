@@ -278,7 +278,16 @@ def generate_pr_description(servers: List[Dict], server_type: str) -> str:
     
     # Apply the same deduplication and sorting as the merge process
     unique_servers = deduplicate_servers_by_url(servers)
-    unique_servers.sort(key=lambda x: x['server_name'].lower())
+    
+    # Sort by server name (primary) and PR number (secondary)
+    def get_original_pr_number(pr_number_str):
+        """Extract original PR number from potentially split PR number."""
+        if '-' in pr_number_str:
+            return int(pr_number_str.split('-')[0])
+        else:
+            return int(pr_number_str)
+    
+    unique_servers.sort(key=lambda x: (x['server_name'].lower(), get_original_pr_number(x['pr_number'])))
     
     # Generate title and description based on server type
     config = SERVER_CONFIGS[server_type]
@@ -298,9 +307,17 @@ def generate_pr_description(servers: List[Dict], server_type: str) -> str:
     
     # List all servers with server names linking to their repository URLs
     for server in unique_servers:
-        # Use original PR number for GitHub links, but display PR number for identification
-        original_pr = server.get('original_pr_number', server['pr_number'])
-        display_pr = server['pr_number']
+        # Extract the base PR number for GitHub links
+        pr_number = server['pr_number']
+        
+        # If PR number has format like "1729-2", extract "1729" for both display and URL
+        if '-' in pr_number:
+            original_pr = pr_number.split('-')[0]
+        else:
+            original_pr = pr_number
+        
+        # Use the original PR number for both display and URL (no more dashes)
+        display_pr = original_pr
         
         # Add split context if this is from a multi-server PR
         split_context = ""
