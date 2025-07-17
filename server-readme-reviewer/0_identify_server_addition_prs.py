@@ -20,6 +20,12 @@ Usage:
     # Default usage with batch size 10, approval checking, and auto-splitting enabled
     python 0_identify_server_addition_prs.py
     
+    # Filter for official servers only
+    python 0_identify_server_addition_prs.py --category official
+    
+    # Filter for community servers only
+    python 0_identify_server_addition_prs.py --category community
+    
     # Custom batch size
     python 0_identify_server_addition_prs.py --batch-size 5
     
@@ -701,7 +707,7 @@ def write_csv_file(results: List[Dict], filename: str):
             })
 
 def write_batched_results(results: List[Dict], output_prefix: str = 'server_addition_prs', batch_size: int = 10):
-    """Write results to batched CSV files, split by category and batch size."""
+    """Write results to batched CSV files, split by category and batch size. Only creates files for categories with results."""
     if not results:
         print("No server addition PRs found.")
         return
@@ -728,7 +734,7 @@ def write_batched_results(results: List[Dict], output_prefix: str = 'server_addi
     
     created_files = []
     
-    # Process official servers
+    # Process official servers (only if there are any)
     if official_servers:
         official_batches = [official_servers[i:i + batch_size] for i in range(0, len(official_servers), batch_size)]
         print(f"\nOfficial servers: {len(official_servers)} servers → {len(official_batches)} batches")
@@ -738,8 +744,10 @@ def write_batched_results(results: List[Dict], output_prefix: str = 'server_addi
             print(f"  - {os.path.basename(batch_filename)} ({len(batch)} servers)")
             write_csv_file(batch, batch_filename)
             created_files.append(batch_filename)
+    else:
+        print(f"\nOfficial servers: 0 servers → No official batch files created")
     
-    # Process community servers
+    # Process community servers (only if there are any)
     if community_servers:
         community_batches = [community_servers[i:i + batch_size] for i in range(0, len(community_servers), batch_size)]
         print(f"\nCommunity servers: {len(community_servers)} servers → {len(community_batches)} batches")
@@ -749,11 +757,16 @@ def write_batched_results(results: List[Dict], output_prefix: str = 'server_addi
             print(f"  - {os.path.basename(batch_filename)} ({len(batch)} servers)")
             write_csv_file(batch, batch_filename)
             created_files.append(batch_filename)
+    else:
+        print(f"\nCommunity servers: 0 servers → No community batch files created")
     
     print(f"\n=== Batching Complete ===")
-    print(f"Created {len(created_files)} batch files:")
-    for filename in created_files:
-        print(f"  - {os.path.basename(filename)}")
+    if created_files:
+        print(f"Created {len(created_files)} batch files:")
+        for filename in created_files:
+            print(f"  - {os.path.basename(filename)}")
+    else:
+        print("No batch files created (no servers found)")
     
     return created_files
 
@@ -781,6 +794,8 @@ def main():
                        help='Disable auto-splitting of multi-server PRs (original behavior)')
     parser.add_argument('--max-servers-per-pr', type=int, default=10,
                        help='Maximum servers per PR for splitting (default: 10)')
+    parser.add_argument('--category', choices=['official', 'community', 'all'], default='all',
+                       help='Filter servers by category: official, community, or all (default: all)')
     
     args = parser.parse_args()
     
@@ -848,6 +863,15 @@ def main():
         
         # Small delay to be nice to the API
         time.sleep(0.2)
+    
+    # Filter results based on category selection
+    if args.category != 'all':
+        original_count = len(results)
+        results = [r for r in results if r['category'] == args.category]
+        filtered_count = original_count - len(results)
+        print(f"\n=== Category Filter Applied ===")
+        print(f"Category filter '{args.category}': Kept {len(results)} servers, filtered out {filtered_count}")
+        logger.info(f"Category filter '{args.category}': Processed {len(results)} servers, filtered {filtered_count}")
     
     # Write results
     print(f"\n=== Final Summary ===")
