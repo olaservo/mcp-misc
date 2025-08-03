@@ -271,13 +271,67 @@ def deduplicate_servers_by_url(servers: List[Dict]) -> List[Dict]:
     
     return unique_servers
 
-def generate_pr_description(servers: List[Dict], server_type: str) -> str:
+def filter_new_servers_against_readme(servers: List[Dict], readme_path: str, server_type: str) -> List[Dict]:
+    """Filter servers to only include those that are not already in the README."""
+    if not os.path.exists(readme_path):
+        print(f"Warning: README file not found at {readme_path}, including all servers")
+        return servers
+    
+    config = SERVER_CONFIGS[server_type]
+    section_header = config['section_header']
+    
+    # Read the current README
+    with open(readme_path, 'r', encoding='utf-8') as f:
+        readme_lines = f.readlines()
+    
+    # Find the servers section
+    start_idx, end_idx = find_servers_section(readme_lines, section_header)
+    
+    if start_idx is None:
+        print(f"Warning: Could not find '{section_header}' section in README, including all servers")
+        return servers
+    
+    # Extract existing server URLs from the section
+    existing_urls = set()
+    section_lines = readme_lines[start_idx:end_idx]
+    
+    for line in section_lines:
+        line_stripped = line.strip()
+        # Skip headers, empty lines, and notes
+        if (line_stripped.startswith('### ') or 
+            line_stripped.startswith('> ') or 
+            not line_stripped or
+            not line_stripped.startswith('- ')):
+            continue
+        
+        url = extract_url_from_line(line.rstrip('\n'))
+        if url:
+            existing_urls.add(url.lower())
+    
+    # Filter out servers that already exist
+    new_servers = []
+    for server in servers:
+        if server['server_url'].lower() not in existing_urls:
+            new_servers.append(server)
+        else:
+            print(f"  Excluding duplicate from PR description: {server['server_name']} ({server['server_url']})")
+    
+    return new_servers
+
+def generate_pr_description(servers: List[Dict], server_type: str, readme_path: str = None) -> str:
     """Generate a PR description for the servers that will be merged."""
     if not servers:
         return "No servers to add."
     
-    # Apply the same deduplication and sorting as the merge process
+    # Filter out servers that already exist in README if path is provided
+    if readme_path:
+        servers = filter_new_servers_against_readme(servers, readme_path, server_type)
+    
+    # Apply deduplication within the new servers list
     unique_servers = deduplicate_servers_by_url(servers)
+    
+    if not unique_servers:
+        return "No new servers to add (all servers already exist in README)."
     
     # Sort by server name (primary) and PR number (secondary)
     def get_original_pr_number(pr_number_str):
@@ -328,14 +382,14 @@ def generate_pr_description(servers: List[Dict], server_type: str) -> str:
     
     return description
 
-def save_pr_description(servers: List[Dict], server_type: str) -> str:
+def save_pr_description(servers: List[Dict], server_type: str, readme_path: str = None) -> str:
     """Generate and save PR description to a file."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(script_dir, 'output')
     os.makedirs(output_dir, exist_ok=True)
     
     # Generate PR description
-    pr_description = generate_pr_description(servers, server_type)
+    pr_description = generate_pr_description(servers, server_type, readme_path)
     
     # Create output filename
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -438,7 +492,7 @@ def main():
     pr_description_file = None
     if args.generate_pr_description:
         print(f"\n=== Generating PR Description ===")
-        pr_description_file = save_pr_description(servers, args.server_type)
+        pr_description_file = save_pr_description(servers, args.server_type, args.readme_path)
     
     # Merge into README (unless it's a dry run with only PR description generation)
     if not args.dry_run or not args.generate_pr_description:
