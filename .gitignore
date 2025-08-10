@@ -1,0 +1,19 @@
+# Output directories
+output
+
+# Node modules
+node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE files
+.vscode/
+.idea/
+.claude
+
+# OS files
+.DS_Store
+Thumbs.db
