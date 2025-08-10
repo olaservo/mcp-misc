@@ -116,7 +116,7 @@ def new_worktree_for_pr(repo_path: Path, pr_num: int, shallow: bool):
     return wt_dir
 
 def open_in_vscode(path: Path, code_binary: str):
-    run([code_binary, "-n", str(path)], check=True, capture=False)
+    run([code_binary, "-n", "--window-state", "maximized", str(path)], check=True, capture=False)
 
 def prompt_choice(pr):
     n = pr["num"]
