@@ -66,6 +66,36 @@ def copy_vscode_tasks(repo_path: Path, wt_dir: Path):
         shutil.copy2(tasks_src, tasks_dest)
 
 def new_worktree_for_pr(repo_path: Path, pr_num: int, shallow: bool):
+    wt_dir = repo_path / ".worktrees" / f"pr-{pr_num}"
+    
+    # Check if worktree already exists in git's worktree list
+    worktree_list = run(["git", "worktree", "list", "--porcelain"], cwd=repo_path)
+    existing_worktree = None
+    for line in worktree_list.splitlines():
+        if line.startswith("worktree ") and f"pr-{pr_num}" in line:
+            existing_worktree = Path(line.split(" ", 1)[1])
+            break
+    
+    if existing_worktree:
+        print(f"Worktree for PR #{pr_num} already exists at {existing_worktree}")
+        
+        # Fetch latest changes for the PR
+        refspec = f"pull/{pr_num}/head:pr-{pr_num}"
+        fetch_cmd = ["git", "fetch"]
+        if shallow:
+            fetch_cmd += ["--depth=2"]
+        fetch_cmd += ["upstream", refspec, "--update-head-ok"]
+        run(fetch_cmd, cwd=repo_path)
+        
+        # Update the existing worktree to latest PR changes
+        print(f"Updating worktree to latest PR #{pr_num} changes...")
+        run(["git", "reset", "--hard", f"pr-{pr_num}"], cwd=existing_worktree)
+        
+        # Copy tasks.json to the existing worktree
+        copy_vscode_tasks(repo_path, existing_worktree)
+        return existing_worktree
+    
+    # Fetch the PR if worktree doesn't exist
     refspec = f"pull/{pr_num}/head:pr-{pr_num}"
     fetch_cmd = ["git", "fetch"]
     if shallow:
@@ -73,11 +103,12 @@ def new_worktree_for_pr(repo_path: Path, pr_num: int, shallow: bool):
     fetch_cmd += ["upstream", refspec, "--update-head-ok"]
     run(fetch_cmd, cwd=repo_path)
 
-    wt_dir = repo_path / ".worktrees" / f"pr-{pr_num}"
-    if not wt_dir.exists():
-        run(["git", "worktree", "add", str(wt_dir), f"pr-{pr_num}"], cwd=repo_path)
-    else:
+    # Clean up any orphaned worktree directories
+    if wt_dir.exists():
         run(["git", "worktree", "prune"], cwd=repo_path)
+    
+    # Create new worktree
+    run(["git", "worktree", "add", str(wt_dir), f"pr-{pr_num}"], cwd=repo_path)
     
     # Copy tasks.json to the worktree
     copy_vscode_tasks(repo_path, wt_dir)
