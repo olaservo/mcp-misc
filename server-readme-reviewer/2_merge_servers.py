@@ -105,7 +105,9 @@ def extract_server_name_from_line(line: str) -> str:
     """Extract server name from a README line for sorting purposes."""
     # Pattern to match server entries: - **[Name](url)** - description
     # or: - <img...> **[Name](url)** - description
-    pattern = r'^\s*-\s+(?:<img[^>]*>\s+)?\*\*\[([^\]]+)\]'
+    # or: - <img...> <img...>**[Name](url)** - description (multiple logos, no space before **)
+    # or: - emoji **[Name](url)** - description
+    pattern = r'^\s*-\s+(?:(?:<img[^>]*>|[^\*\-\s])\s*)*\*\*\[([^\]]+)\]'
     match = re.match(pattern, line.strip())
     if match:
         return match.group(1)
@@ -115,7 +117,9 @@ def extract_url_from_line(line: str) -> str:
     """Extract URL from a README line for deduplication purposes."""
     # Pattern to match server entries: - **[Name](url)** - description
     # or: - <img...> **[Name](url)** - description
-    pattern = r'^\s*-\s+(?:<img[^>]*>\s+)?\*\*\[[^\]]+\]\(([^)]+)\)'
+    # or: - <img...> <img...>**[Name](url)** - description (multiple logos, no space before **)
+    # or: - emoji **[Name](url)** - description
+    pattern = r'^\s*-\s+(?:(?:<img[^>]*>|[^\*\-\s])\s*)*\*\*\[[^\]]+\]\(([^)]+)\)'
     match = re.match(pattern, line.strip())
     if match:
         return match.group(1)
