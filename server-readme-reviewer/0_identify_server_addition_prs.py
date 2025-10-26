@@ -572,7 +572,7 @@ def analyze_pr_for_server_addition(pr: Dict, split_multiple_servers: bool = True
     print(f"    Checking approval status...")
     approval_info = check_pr_approval_status(pr_number)
     if approval_info['is_approved']:
-        print(f"    ✓ PR is approved by {approval_info['approver']} ({approval_info['approval_count']} approval(s))")
+        print(f"    [APPROVED] PR is approved by {approval_info['approver']} ({approval_info['approval_count']} approval(s))")
         if logger:
             logger.info(f"PR #{pr_number} is pre-approved by {approval_info['approver']}")
     else:
@@ -649,11 +649,11 @@ def analyze_pr_for_server_addition(pr: Dict, split_multiple_servers: bool = True
     
     # Log the results
     if len(added_lines) == 1:
-        print(f"    ✓ Found {server_entries[0]['category']} server addition: {server_entries[0]['server_name']}")
+        print(f"    [OK] Found {server_entries[0]['category']} server addition: {server_entries[0]['server_name']}")
         if logger:
             logger.info(f"ACCEPTED PR #{pr_number}: {server_entries[0]['category']} server '{server_entries[0]['server_name']}' by {pr_author}")
     else:
-        print(f"    ✓ Found {len(added_lines)} server additions (split into individual entries):")
+        print(f"    [OK] Found {len(added_lines)} server additions (split into individual entries):")
         for entry in server_entries:
             print(f"      - {entry['category']}: {entry['server_name']} (PR #{entry['pr_number']})")
         if logger:
@@ -737,28 +737,28 @@ def write_batched_results(results: List[Dict], output_prefix: str = 'server_addi
     # Process official servers (only if there are any)
     if official_servers:
         official_batches = [official_servers[i:i + batch_size] for i in range(0, len(official_servers), batch_size)]
-        print(f"\nOfficial servers: {len(official_servers)} servers → {len(official_batches)} batches")
-        
+        print(f"\nOfficial servers: {len(official_servers)} servers -> {len(official_batches)} batches")
+
         for batch_num, batch in enumerate(official_batches, 1):
             batch_filename = os.path.join(output_dir, f"{output_prefix}_official_batch_{batch_num}.csv")
             print(f"  - {os.path.basename(batch_filename)} ({len(batch)} servers)")
             write_csv_file(batch, batch_filename)
             created_files.append(batch_filename)
     else:
-        print(f"\nOfficial servers: 0 servers → No official batch files created")
-    
+        print(f"\nOfficial servers: 0 servers -> No official batch files created")
+
     # Process community servers (only if there are any)
     if community_servers:
         community_batches = [community_servers[i:i + batch_size] for i in range(0, len(community_servers), batch_size)]
-        print(f"\nCommunity servers: {len(community_servers)} servers → {len(community_batches)} batches")
-        
+        print(f"\nCommunity servers: {len(community_servers)} servers -> {len(community_batches)} batches")
+
         for batch_num, batch in enumerate(community_batches, 1):
             batch_filename = os.path.join(output_dir, f"{output_prefix}_community_batch_{batch_num}.csv")
             print(f"  - {os.path.basename(batch_filename)} ({len(batch)} servers)")
             write_csv_file(batch, batch_filename)
             created_files.append(batch_filename)
     else:
-        print(f"\nCommunity servers: 0 servers → No community batch files created")
+        print(f"\nCommunity servers: 0 servers -> No community batch files created")
     
     print(f"\n=== Batching Complete ===")
     if created_files:
@@ -852,7 +852,7 @@ def main():
             # server_entries is now a list of server entries
             results.extend(server_entries)
             accepted_count += 1
-            print(f"  ✓ Added to results")
+            print(f"  [OK] Added to results")
         else:
             rejected_count += 1
             print(f"  - Not a server addition PR")
