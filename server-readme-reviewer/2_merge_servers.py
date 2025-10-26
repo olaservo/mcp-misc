@@ -506,16 +506,16 @@ def main():
     # Final summary
     print(f"\n=== Summary ===")
     if args.generate_pr_description:
-        print(f"✓ PR description generated: {pr_description_file}")
-    
+        print(f"[+] PR description generated: {pr_description_file}")
+
     if args.dry_run:
         if args.generate_pr_description:
-            print("✓ PR description shows what would be included")
-        print("✓ Dry run completed - no README changes made")
+            print("[+] PR description shows what would be included")
+        print("[+] Dry run completed - no README changes made")
     else:
-        print(f"✓ {display_name} merge completed successfully")
-    
-    print(f"✓ Processed {len(servers)} {args.server_type} servers")
+        print(f"[+] {display_name} merge completed successfully")
+
+    print(f"[+] Processed {len(servers)} {args.server_type} servers")
 
 if __name__ == "__main__":
     main()
