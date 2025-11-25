@@ -120,9 +120,7 @@ def check_pr_status(pr_number: int) -> Optional[Dict]:
 
 def add_comment_to_pr(pr_number: int, combined_pr_url: str, dry_run: bool = False) -> bool:
     """Add a comment to the original PR."""
-    comment_body = f"""Thanks for your contribution to the servers list. This has been merged in this combined PR: {combined_pr_url}
-
-This is a new process we're trying out, so if you see any issues feel free to re-open the PR and tag me."""
+    comment_body = f"""Thanks for your contribution to the servers list. This has been merged in this combined PR: {combined_pr_url}"""
     
     if dry_run:
         print(f"    [DRY RUN] Would add comment to PR #{pr_number}:")
@@ -137,11 +135,11 @@ This is a new process we're trying out, so if you see any issues feel free to re
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8', errors='replace')
-        print(f"    ✓ Comment added to PR #{pr_number}")
+        print(f"    [OK] Comment added to PR #{pr_number}")
         return True
         
     except subprocess.CalledProcessError as e:
-        print(f"    ✗ Error adding comment to PR #{pr_number}: {e}")
+        print(f"    [X] Error adding comment to PR #{pr_number}: {e}")
         if e.stderr:
             print(f"    stderr: {e.stderr}")
         return False
@@ -160,11 +158,11 @@ def close_pr(pr_number: int, dry_run: bool = False) -> bool:
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8', errors='replace')
-        print(f"    ✓ PR #{pr_number} closed")
+        print(f"    [OK] PR #{pr_number} closed")
         return True
         
     except subprocess.CalledProcessError as e:
-        print(f"    ✗ Error closing PR #{pr_number}: {e}")
+        print(f"    [X] Error closing PR #{pr_number}: {e}")
         if e.stderr:
             print(f"    stderr: {e.stderr}")
         return False
@@ -187,7 +185,7 @@ def process_pr(pr_info: Dict, combined_pr_url: str, dry_run: bool = False) -> Di
         }
     
     if status['state'] == 'closed':
-        print(f"    ⚠ PR #{pr_number} is already closed, skipping")
+        print(f"    [!] PR #{pr_number} is already closed, skipping")
         return {
             'pr_number': pr_number,
             'success': True,
@@ -197,7 +195,7 @@ def process_pr(pr_info: Dict, combined_pr_url: str, dry_run: bool = False) -> Di
         }
     
     if status.get('merged', False):
-        print(f"    ⚠ PR #{pr_number} is already merged, skipping")
+        print(f"    [!] PR #{pr_number} is already merged, skipping")
         return {
             'pr_number': pr_number,
             'success': True,
@@ -376,7 +374,7 @@ def main():
     
     # Final confirmation for non-dry-run
     if not args.dry_run and not args.auto_confirm:
-        print(f"\n⚠ WARNING: This will comment on and close {len(prs)} PRs!")
+        print(f"\n[!] WARNING: This will comment on and close {len(prs)} PRs!")
         response = input("Are you sure you want to continue? (y/n): ").strip().lower()
         if response != 'y':
             print("Operation cancelled by user")
@@ -424,9 +422,9 @@ def main():
         log_results(all_results, args.combined_pr_url, args.dry_run)
     
     if args.dry_run:
-        print(f"\n✓ Dry run completed - no actual changes made")
+        print(f"\n[OK] Dry run completed - no actual changes made")
     else:
-        print(f"\n✓ Operation completed")
+        print(f"\n[OK] Operation completed")
 
 if __name__ == "__main__":
     main()
